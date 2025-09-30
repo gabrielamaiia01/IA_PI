@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Monitor RJ - Dashboard</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="container">
+        <aside class="sidebar">
+            <div class="logo">Monitor RJ</div>
+            <nav>
+                <ul>
+                    <li class="active"><a href="/">Dashboard</a></li>
+                    <li><a href="/previsao">Previsão</a></li>
+                    <li><a href="#">Relatórios</a></li>
+                </ul>
+            </nav>
+            <div class="settings">
+                <a href="#">Configurações</a>
+            </div>
+        </aside>
+        <main class="main-content">
+            <header class="header">
+                <h1>Monitor de Letalidade Violenta - RJ</h1>
+                <span class="updated-date">Atualizado: Ago/2025</span>
+            </header>
+            <section class="filters">
+                <div class="filter-item">
+                    <label for="periodo">Período</label>
+                    <select id="periodo">
+                        <option>Ano/Mês</option>
+                    </select>
+                </div>
+                <div class="filter-item">
+                    <label for="regiao">Região</label>
+                    <select id="regiao">
+                        <option>Município / Bairro</option>
+                    </select>
+                </div>
+            </section>
+            <section class="kpis">
+                <div class="kpi-card">
+                    <h3>Letalidade Violenta total</h3>
+                    <p class="value" id="total_letalidade">1.238</p>
+                    <p class="description">no período selecionado</p>
+                </div>
+                <div class="kpi-card">
+                    <h3>Homicídios dolosos</h3>
+                    <p class="value" id="homicidios_dolosos">842</p>
+                    <p class="description">comparado ao mês anterior: -3%</p>
+                </div>
+                <div class="kpi-card">
+                    <h3>Latrocínios</h3>
+                    <p class="value" id="latrocinios">57</p>
+                    <p class="description">variação anual: +2%</p>
+                </div>
+                <div class="kpi-card">
+                    <h3>Mortes por intervenção policial</h3>
+                    <p class="value" id="mortes_policial">339</p>
+                    <p class="description">tendência: estável</p>
+                </div>
+            </section>
+            <section class="charts">
+                <h2>Gráficos</h2>
+                <div class="chart-row">
+                    <div class="chart-card">
+                        <h3>Evolução temporal da letalidade</h3>
+                        <div class="chart-type">Linha</div>
+                        <div class="chart-placeholder"></div>
+                    </div>
+                    <div class="chart-card">
+                        <h3>Correlação entre crimes e letalidade</h3>
+                        <div class="chart-type">Heatmap / Barras</div>
+                        <div class="chart-placeholder"></div>
+                    </div>
+                </div>
+                <div class="chart-row">
+                    <div class="chart-card full-width">
+                        <h3>Roubo em via pública x Letalidade violenta</h3>
+                        <div class="chart-type">Scatterplot</div>
+                        <div class="chart-placeholder"></div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+    <script src="/static/js/dashboard.js"></script>
+</body>
+</html>
+

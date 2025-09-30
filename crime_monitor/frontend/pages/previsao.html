@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Monitor RJ - Previsão</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="container">
+        <aside class="sidebar">
+            <div class="logo">Monitor RJ</div>
+            <nav>
+                <ul>
+                    <li><a href="/">Dashboard</a></li>
+                    <li class="active"><a href="/previsao">Previsão</a></li>
+                    <li><a href="#">Relatórios</a></li>
+                </ul>
+            </nav>
+            <div class="settings">
+                <a href="#">Configurações</a>
+            </div>
+        </aside>
+        <main class="main-content">
+            <header class="header">
+                <h1>Monitor de Letalidade Violenta - RJ</h1>
+                <span class="updated-date">Atualizado: Ago/2025</span>
+            </header>
+            <section class="prediction-controls">
+                <h2>Previsão</h2>
+                <div class="control-group">
+                    <div class="control-item">
+                        <label for="periodo-futuro">Período futuro</label>
+                        <select id="periodo-futuro">
+                            <option>Escolha o mês</option>
+                        </select>
+                    </div>
+                    <div class="control-item">
+                        <label for="regiao-previsao">Região</label>
+                        <select id="regiao-previsao">
+                            <option>Estado do RJ</option>
+                        </select>
+                    </div>
+                     <div class="control-item">
+                        <label for="regiao-previsao">Municipio</label>
+                        <select id="regiao-previsao">
+                            <option>Municipio do RJ</option>
+                        </select>
+                    </div>
+                    <button class="generate-button">Gerar Previsão</button>
+                </div>
+            </section>
+            <section class="prediction-charts">
+                <div class="chart-card full-width">
+                    <h3>Histórico + Previsão</h3>
+                    <div class="legend">
+                        <span class="legend-item"><span class="dot historic"></span> Histórico</span>
+                        <span class="legend-item"><span class="dot prediction"></span> Previsão</span>
+                       
+                    </div>
+                    <div class="chart-placeholder"></div>
+                </div>
+            </section>
+            <section class="prediction-details">
+                <div class="details-summary">
+                    <div class="summary-header">
+                        <h3>Detalhes da Previsão</h3>
+                        <span class="tab active">Resumo</span>
+                    </div>
+                    <div class="summary-content">
+                        <div class="kpi-card">
+                            <h3>Letalidade violenta prevista</h3>
+                            <p class="value" id="previsao_leitura">1.190</p>
+                            <p class="description">Com base em séries temporais e correlações</p>
+                        </div>
+                        <div class="highlight-box">
+                            <p id="detalhes_previsao">Drivers principais: queda de roubos de rua (-4%), sazonalidade pós-feriado, operações policiais estáveis.</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="details-factors">
+                    <div class="factors-header">
+                        <h3>Contribuição por fator</h3>
+                        <span class="tab active">Barras</span>
+                    </div>
+                    <div class="factors-content">
+                        <div class="chart-placeholder"></div>
+                    </div>
+                </div>
+            </section>
+            <section class="prediction-kpis">
+                <div class="kpi-card">
+                    <h3>Previsão próxima leitura</h3>
+                    <p class="value" id="previsao_proxima_leitura">1.190</p>
+                </div>
+                <div class="kpi-card">
+                    <h3>Intervalo 95%</h3>
+                    <p class="value" id="intervalo_95">1.120 - 1.260</p>
+                </div>
+                <div class="kpi-card">
+                    <h3>Tendência</h3>
+                    <p class="value" id="tendencia">Leve queda</p>
+                </div>
+            </section>
+        </main>
+    </div>
+    <script src="/static/js/previsao.js"></script>
+</body>
+</html>
+
