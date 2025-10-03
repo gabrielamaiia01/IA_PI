@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Monitor RJ - Dashboard</title>
-    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="stylesheet" href="../static/css/style.css">
 </head>
 <body>
     <div class="container">
@@ -73,20 +73,40 @@
                     <div class="chart-card">
                         <h3>Correlação entre crimes e letalidade</h3>
                         <div class="chart-type">Heatmap / Barras</div>
-                        <div class="chart-placeholder"></div>
+                        <div class="chart-placeholder" id="chart-heatmap"></div>
                     </div>
                 </div>
                 <div class="chart-row">
                     <div class="chart-card full-width">
                         <h3>Roubo em via pública x Letalidade violenta</h3>
                         <div class="chart-type">Scatterplot</div>
-                        <div class="chart-placeholder"></div>
+                        <div class="chart-placeholder" id="chart-scatter"></div>
+                    </div>
+                </div>
+                <div class="filter-item chart-row">
+                    <div class="chart-card full-width">
+                        <h3>Mapa de Letalidade violenta</h3>
+                        <label for="map-group">Mapa por:</label>
+                        <select id="map-group">
+                            <option value="mcirc">Município</option>
+                            <option value="cisp">CISP</option>
+                            <option value="aisp">AISP</option>
+                            <option value="risp">RISP</option>
+                        </select>
+                        <div id="map-container" class="chart-placeholder" style="height: 300px;">
+                            <img id="map-img" style="height:100%; object-fit:contain;" />
+                        </div>
                     </div>
                 </div>
             </section>
         </main>
     </div>
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet-choropleth/choropleth.js"></script>
     <script src="/static/js/dashboard.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-matrix@1.2.0/dist/chartjs-chart-matrix.min.js"></script>
+
 </body>
 </html>
 
