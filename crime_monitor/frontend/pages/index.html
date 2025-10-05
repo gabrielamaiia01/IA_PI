@@ -14,7 +14,7 @@
                 <ul>
                     <li class="active"><a href="/">Dashboard</a></li>
                     <li><a href="/previsao">Previsão</a></li>
-                    <li><a href="#">Relatórios</a></li>
+                    <li><a href="/agrupamentos">Agrupamentos</a></li>
                 </ul>
             </nav>
             <div class="settings">
@@ -28,16 +28,17 @@
             </header>
             <section class="filters">
                 <div class="filter-item">
-                    <label for="periodo">Período</label>
-                    <select id="periodo">
-                        <option>Ano/Mês</option>
-                    </select>
+                    <label for="data-inicio">Data início</label>
+                    <input type="date" id="data-inicio">
                 </div>
                 <div class="filter-item">
-                    <label for="regiao">Região</label>
-                    <select id="regiao">
-                        <option>Município / Bairro</option>
-                    </select>
+                    <label for="data-fim">Data fim</label>
+                    <input type="date" id="data-fim">
+                </div>
+                <div class="filter-item">
+                    <label for="regiao">Município</label>
+                    <input list="lista-municipios" id="municipio" placeholder="Digite ou selecione um município">
+                    <datalist id="lista-municipios"></datalist>
                 </div>
             </section>
             <section class="kpis">
@@ -63,7 +64,13 @@
                 </div>
             </section>
             <section class="charts">
-                <h2>Gráficos</h2>
+                <div class="charts-header">
+                    <h2>Gráficos</h2>
+                    <button id="btn-export-pdf" class="btn-export-pdf" title="Exportar gráficos em PDF">
+                        <i class="bi bi-download"></i>
+                    </button>
+                </div>
+
                 <div class="chart-row">
                     <div class="chart-card">
                         <h3>Evolução temporal da letalidade</h3>
@@ -101,12 +108,17 @@
             </section>
         </main>
     </div>
+
+    <!-- libs externas -->
     <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
     <script src="https://unpkg.com/leaflet-choropleth/choropleth.js"></script>
     <script src="/static/js/dashboard.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-matrix@1.2.0/dist/chartjs-chart-matrix.min.js"></script>
 
-</body>
+    <!-- libs para exportar PDF -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
+    </body>
 </html>
-

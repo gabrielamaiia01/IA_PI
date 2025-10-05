@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Monitor RJ - PCA</title>
+    <link rel="stylesheet" href="../static/css/style.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
+</head>
+<body>
+    <div class="container">
+        <aside class="sidebar">
+            <div class="logo">Monitor RJ</div>
+            <nav>
+                <ul>
+                    <li><a href="/">Dashboard</a></li>
+                    <li><a href="/previsao">Previsão</a></li>
+                    <li class="active"><a href="/agrupamentos">Agrupamentos</a></li>
+                </ul>
+            </nav>
+            <div class="settings">
+                <a href="#">Configurações</a>
+            </div>
+        </aside>
+
+        <main class="main-content">
+            <header class="header">
+                <h1>Monitor de Letalidade Violenta - RJ</h1>
+                <span class="updated-date">Atualizado: Ago/2025</span>
+            </header>
+
+            <!-- FILTROS -->
+            <section class="filters">
+                <div class="filter-item">
+                    <label for="num-clusters">Número de clusters (K)</label>
+                    <input type="number" id="num-clusters" min="2" max="10" value="4">
+                </div>
+                <div class="filter-item">
+                    <button id="btn-aplicar" class="btn-primary">Aplicar</button>
+                </div>
+            </section>
+
+            <!-- GRÁFICOS -->
+            <section class="charts">
+                <div class="charts-header">
+                    <h2>Gráficos</h2>
+                    <button id="btn-export-pdf" class="btn-export-pdf" title="Exportar gráficos em PDF">
+                        <i class="bi bi-download"></i>
+                    </button>
+                </div>
+
+                <div class="chart-row">
+                    <div class="chart-card">
+                        <h3>Projeção dos Componentes Principais</h3>
+                        <div class="chart-placeholder">
+                           <canvas id="pca-scatter" width="450" height="300"></canvas>
+                        </div>
+                    </div>
+                    <div class="chart-card">
+                        <h3>Método do Cotovelo</h3>
+                        <div class="chart-placeholder">
+                           <img id="elbow-plot" width="400" alt="Método do Cotovelo">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="chart-card full-width">
+                    <h3>Perfil médio dos clusters</h3>
+                    <div class="chart-placeholder">
+                       <img id="cluster-profile" width="800" alt="Perfil médio dos clusters">
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- libs externas -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-matrix@1.2.0/dist/chartjs-chart-matrix.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+    <!-- Script PCA -->
+    <script src="/static/js/agrupamentos.js"></script>
+</body>
+</html>

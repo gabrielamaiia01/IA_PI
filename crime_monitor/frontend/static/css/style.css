@@ -337,3 +337,44 @@ body {
     gap: 20px;
 }
 
+.charts-header {
+    display: flex;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.btn-export-pdf {
+    background: linear-gradient(135deg, #0077b6, #00b4d8);
+    border: none;
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+    transition: all 0.3s ease;
+    color: #fff;
+    font-size: 18px;
+    margin: 0 10px;
+}
+
+.btn-export-pdf:hover {
+    background: linear-gradient(135deg, #00b4d8, #90e0ef);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 12px rgba(0,0,0,0.2);
+}
+
+.btn-export-pdf:active {
+    transform: scale(0.95);
+}
+
+#data-inicio,
+#data-fim,
+#municipio {
+    padding: 7px 10px; /* aumenta o padding interno */
+    font-size: 16px;     /* opcional: deixa o texto maior */
+    border-radius: 6px;  /* deixa os cantos mais arredondados */
+    border: 1px solid #ccc;
+}
