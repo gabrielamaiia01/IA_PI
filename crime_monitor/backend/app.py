@@ -9,7 +9,6 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.cluster import KMeans
 from sklearn.impute import SimpleImputer
 from sklearn.decomposition import PCA
-from sklearn.metrics import silhouette_score, calinski_harabasz_score, davies_bouldin_score
 import numpy as np
 from flask import Flask, jsonify, request
 import pandas as pd
@@ -239,14 +238,33 @@ def agrupamentos_data():
     k = int(request.args.get("k", 4))
     inicio = request.args.get("inicio")
     fim = request.args.get("fim")
+    municipio = request.args.get("municipio")
 
+    # ===============================
+    # 🔹 Filtragem por data e município
+    # ===============================
     df["data"] = pd.to_datetime(df["ano"].astype(str) + "-" + df["mes"].astype(str) + "-01")
+
     if inicio:
         df = df[df["data"] >= pd.to_datetime(inicio)]
     if fim:
         df = df[df["data"] <= pd.to_datetime(fim)]
+    if municipio:
+        try:
+            gdf_mun = gpd.read_file(SHAPEFILES["mcirc"])[["CD_MUN", "NM_MUN"]]
+            gdf_mun["CD_MUN"] = gdf_mun["CD_MUN"].astype(str)
+            df["mcirc"] = df["mcirc"].astype(str)
+            df = df.merge(gdf_mun, left_on="mcirc", right_on="CD_MUN", how="left")
+            df = df[df["NM_MUN"] == municipio]
+        except Exception as e:
+            print("Erro ao filtrar por município:", e)
 
-    # Seleciona apenas colunas numéricas relevantes
+    if df.empty:
+        return jsonify({"error": "Sem dados após filtragem."}), 400
+
+    # ===============================
+    # 🔹 Seleção de colunas numéricas
+    # ===============================
     dados_cluster = df.select_dtypes(include=[np.number]).drop(columns=[
         'hom_doloso','lesao_corp_morte','latrocinio','cvli','hom_por_interv_policial',
         'ameaca','total_roubos','recuperacao_veiculos','fase','encontro_ossada',
@@ -263,46 +281,43 @@ def agrupamentos_data():
     if dados_cluster.empty:
         return jsonify({"error": "Sem dados numéricos para agrupar."}), 400
 
+    # ===============================
+    # 🔹 Imputação e normalização
+    # ===============================
     colunas = dados_cluster.columns
-
-    # Imputação e normalização
     imputer = SimpleImputer(strategy="mean")
     dados_imp = pd.DataFrame(imputer.fit_transform(dados_cluster), columns=colunas)
     scaler = StandardScaler()
     dados_scaled = scaler.fit_transform(dados_imp)
 
-    # ----------------------
-    # KMeans
-    # ----------------------
+    # ===============================
+    # 🔹 KMeans clustering
+    # ===============================
     kmeans = KMeans(n_clusters=k, random_state=42)
     clusters = kmeans.fit_predict(dados_scaled)
     df['cluster'] = clusters
-
-    sil = silhouette_score(dados_scaled, clusters)
-    ch = calinski_harabasz_score(dados_scaled, clusters)
-    db = davies_bouldin_score(dados_scaled, clusters)
-
     media_clusters = df.groupby('cluster')[colunas].mean().round(2).to_dict(orient="index")
 
-    # ----------------------
-    # PCA 2D
-    # ----------------------
+    # ===============================
+    # 🔹 PCA 2D
+    # ===============================
     pca = PCA(n_components=2)
     pca_result = pca.fit_transform(dados_scaled)
     pca_df = pd.DataFrame(pca_result, columns=["pca1", "pca2"])
     pca_df["cluster"] = clusters
     pca_data = pca_df.to_dict(orient="records")
 
-    # ----------------------
-    # Perfil médio dos clusters (normalizado)
-    # ----------------------
+    # ===============================
+    # 🔹 Perfil médio dos clusters
+    # ===============================
     df_cluster_profile = df.groupby("cluster")[colunas].mean()
 
-    # Exclui colunas de agrupamentos geográficos
+    # Remove colunas geográficas (se existirem)
     for col_geo in ["cisp", "aisp", "risp", "mcirc"]:
         if col_geo in df_cluster_profile.columns:
             df_cluster_profile = df_cluster_profile.drop(columns=[col_geo])
 
+    # Normaliza para visualização
     df_norm = (df_cluster_profile - df_cluster_profile.min()) / (df_cluster_profile.max() - df_cluster_profile.min())
 
     perfil_img_path = os.path.join(MAP_FOLDER, f"perfil_medio_{k}.png")
@@ -315,9 +330,9 @@ def agrupamentos_data():
     fig1.savefig(perfil_img_path, dpi=150)
     plt.close(fig1)
 
-    # ----------------------
-    # Método do cotovelo
-    # ----------------------
+    # ===============================
+    # 🔹 Método do cotovelo
+    # ===============================
     inertia = []
     K_range = range(2, 10)
     for k_elbow in K_range:
@@ -335,14 +350,10 @@ def agrupamentos_data():
     fig2.savefig(cotovelo_img_path, dpi=150)
     plt.close(fig2)
 
-    # ----------------------
-    # Retorna JSON com caminhos das imagens
-    # ----------------------
+    # ===============================
+    # 🔹 Retorno JSON final
+    # ===============================
     return jsonify({
-        "n_clusters": k,
-        "silhouette": round(sil, 3),
-        "calinski_harabasz": round(ch, 3),
-        "davies_bouldin": round(db, 3),
         "media_clusters": media_clusters,
         "pca_data": pca_data,
         "explained_variance": [round(v, 3) for v in pca.explained_variance_ratio_],

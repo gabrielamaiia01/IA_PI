@@ -378,3 +378,71 @@ body {
     border-radius: 6px;  /* deixa os cantos mais arredondados */
     border: 1px solid #ccc;
 }
+
+/* === Estilo aprimorado do input de clusters === */
+.k-input {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.input-wrapper {
+    display: flex;
+    align-items: center;
+    background: #f9fafb;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 8px 12px;
+    transition: all 0.3s ease;
+    box-shadow: inset 0 1px 3px rgba(0,0,0,0.05);
+}
+
+.input-wrapper:hover,
+.input-wrapper:focus-within {
+    border-color: #007bff;
+    box-shadow: 0 0 0 3px rgba(0,123,255,0.1);
+}
+
+.input-wrapper .icon {
+    color: #007bff;
+    font-size: 18px;
+    margin-right: 8px;
+}
+
+.styled-input {
+    border: none;
+    outline: none;
+    flex: 1;
+    font-size: 15px;
+    background: transparent;
+    color: #333;
+}
+
+/* === Botão "Aplicar" estilizado === */
+.btn-aplicar {
+    display: flex;
+    align-self: flex-end;
+    gap: 6px;
+    background: #007bff;
+    color: #fff;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-size: 15px;
+    font-weight: 500;
+    cursor: pointer;
+    box-shadow: 0 4px 10px rgba(0, 123, 255, 0.3);
+    transition: all 0.3s ease;
+}
+/* Deixa o input e o botão na mesma linha */
+.filters {
+    display: flex;
+    align-items: flex-end; /* alinha pela base do input e botão */
+    gap: 15px;
+    margin-bottom: 30px;
+    background-color: #fff;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}

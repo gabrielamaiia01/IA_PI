@@ -5,10 +5,33 @@ document.addEventListener("DOMContentLoaded", async () => {
     const mapImg = document.getElementById("map-img");
 
     // ===========================
+    // Carregar municípios
+    // ===========================
+    try {
+        const response = await fetch("/api/municipios");
+        municipios = await response.json();
+    } catch (err) {
+        console.error("Erro ao carregar municípios:", err);
+    }
+
+    // Autocomplete do input município
+    inputMunicipio.addEventListener("input", () => {
+        const valor = inputMunicipio.value.toLowerCase();
+        datalist.innerHTML = "";
+        municipios
+            .filter(m => m.toLowerCase().startsWith(valor))
+            .forEach(m => {
+                const option = document.createElement("option");
+                option.value = m;
+                datalist.appendChild(option);
+            });
+    });
+
+    // ===========================
     // Função para carregar mapa
     // ===========================
     async function loadMapImage(groupBy = "mcirc") {
-        mapImg.src = "";
+        if (!mapImg) return;
 
         const dataInicio = document.getElementById("data-inicio").value;
         const dataFim = document.getElementById("data-fim").value;
@@ -42,14 +65,13 @@ document.addEventListener("DOMContentLoaded", async () => {
                 return;
             }
 
-            // ===========================
             // Atualiza KPIs
-            // ===========================
             document.getElementById("total_letalidade").textContent = data.letalidade_violenta_total;
             document.getElementById("homicidios_dolosos").textContent = data.homicidios_dolosos;
             document.getElementById("latrocinios").textContent = data.latrocinios;
             document.getElementById("mortes_policial").textContent = data.mortes_intervencao_policial;
 
+            // Atualiza descrições
             let homicidiosPct = data.homicidios_dolosos_pct;
             let homicidiosText = homicidiosPct != null
                 ? (homicidiosPct >= 0 ? "+" : "") + parseInt(homicidiosPct) + "%"
@@ -67,9 +89,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             document.querySelector("#mortes_policial + .description").textContent =
                 "tendência: " + data.tendencia_mortes_intervencao_policial;
 
-            // ===========================
             // Evolução temporal (linha)
-            // ===========================
             const ctxLinha = document.createElement("canvas");
             const linhaContainer = document.querySelector(".chart-row .chart-card:first-child .chart-placeholder");
             linhaContainer.innerHTML = "";
@@ -91,9 +111,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 options: { responsive: true, plugins: { legend: { display: true } }, scales: { y: { beginAtZero: true } } }
             });
 
-            // ===========================
             // Gráfico de barras (correlação)
-            // ===========================
             const correlacao = data.correlacao_crimes || {};
             const vars = Object.keys(correlacao);
             const values = Object.values(correlacao);
@@ -117,20 +135,12 @@ document.addEventListener("DOMContentLoaded", async () => {
                 },
                 options: {
                     responsive: true,
-                    scales: {
-                        y: { beginAtZero: true, min: -1, max: 1, title: { display: true, text: 'Correlação' } },
-                        x: { title: { display: true, text: 'Variáveis' } }
-                    },
-                    plugins: {
-                        tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(2)}` } },
-                        legend: { display: false }
-                    }
+                    scales: { y: { beginAtZero: true, min: -1, max: 1 }, x: {} },
+                    plugins: { legend: { display: false } }
                 }
             });
 
-            // ===========================
-            // Scatterplot (roubo x letalidade)
-            // ===========================
+            // Scatterplot
             const scatterData = data.scatter_data || [];
             const ctxScatter = document.createElement("canvas");
             const scatterContainer = document.getElementById("chart-scatter");
@@ -139,23 +149,8 @@ document.addEventListener("DOMContentLoaded", async () => {
 
             new Chart(ctxScatter, {
                 type: "scatter",
-                data: {
-                    datasets: [{
-                        label: "Roubo via Pública x Letalidade Violenta",
-                        data: scatterData,
-                        backgroundColor: "rgba(75, 192, 192, 0.7)"
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    scales: {
-                        x: { title: { display: true, text: "Roubo via Pública" } },
-                        y: { title: { display: true, text: "Letalidade Violenta" } }
-                    },
-                    plugins: {
-                        tooltip: { callbacks: { label: (ctx) => `Roubo: ${ctx.parsed.x}, Letalidade: ${ctx.parsed.y}` } }
-                    }
-                }
+                data: { datasets: [{ label: "Roubo x Letalidade", data: scatterData, backgroundColor: "rgba(75, 192, 192, 0.7)" }] },
+                options: { responsive: true }
             });
 
         } catch (err) {
@@ -164,29 +159,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     // ===========================
-    // Carregar municípios
-    // ===========================
-    try {
-        const response = await fetch("/api/municipios");
-        municipios = await response.json();
-    } catch (err) {
-        console.error("Erro ao carregar municípios:", err);
-    }
-
-    inputMunicipio.addEventListener("input", () => {
-        const valor = inputMunicipio.value.toLowerCase();
-        datalist.innerHTML = "";
-        municipios
-            .filter(m => m.toLowerCase().startsWith(valor))
-            .forEach(m => {
-                const option = document.createElement("option");
-                option.value = m;
-                datalist.appendChild(option);
-            });
-    });
-
-    // ===========================
-    // Aplicar filtros
+    // Função aplicar filtros
     // ===========================
     async function aplicarFiltros() {
         const dataInicio = document.getElementById("data-inicio").value;
@@ -202,27 +175,13 @@ document.addEventListener("DOMContentLoaded", async () => {
         await loadMapImage(document.getElementById("map-group").value);
     }
 
-    // Atualiza quando mudar as datas
-    document.getElementById("data-inicio").addEventListener("change", aplicarFiltros);
-    document.getElementById("data-fim").addEventListener("change", aplicarFiltros);
-
-    // Atualiza imediatamente quando selecionar município válido
-    inputMunicipio.addEventListener("input", async () => {
-        const municipioValido = municipios.find(
-            m => m.toLowerCase() === inputMunicipio.value.toLowerCase()
-        );
-
-        // Só aplica filtros se o município for reconhecido
-        if (municipioValido || inputMunicipio.value === "") {
-            await aplicarFiltros();
-        }
-    });
-
-    // Primeira carga
-    aplicarFiltros();
+    // ===========================
+    // Só aplica filtros ao clicar no botão
+    // ===========================
+    document.getElementById("btn-aplicar").addEventListener("click", aplicarFiltros);
 
     // ===========================
-    // Exportar gráficos para PDF
+    // Exportar PDFs
     // ===========================
     document.getElementById("btn-export-pdf").addEventListener("click", async () => {
         const { jsPDF } = window.jspdf;
@@ -231,26 +190,21 @@ document.addEventListener("DOMContentLoaded", async () => {
         const pageWidth = pdf.internal.pageSize.getWidth() - margin * 2;
         let yOffset = margin;
 
-        const elements = [
-            ...document.querySelectorAll(".chart-placeholder")
-        ];
+        const elements = [...document.querySelectorAll(".chart-placeholder")];
 
-        for (let i = 0; i < elements.length; i++) {
-            const element = elements[i];
-
+        for (let element of elements) {
             try {
                 const canvas = await html2canvas(element, { scale: 2 });
                 const imgData = canvas.toDataURL("image/png");
                 const imgProps = pdf.getImageProperties(imgData);
-                const pdfWidth = pageWidth;
-                const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+                const pdfHeight = (imgProps.height * pageWidth) / imgProps.width;
 
                 if (yOffset + pdfHeight > pdf.internal.pageSize.getHeight()) {
                     pdf.addPage();
                     yOffset = margin;
                 }
 
-                pdf.addImage(imgData, "PNG", margin, yOffset, pdfWidth, pdfHeight);
+                pdf.addImage(imgData, "PNG", margin, yOffset, pageWidth, pdfHeight);
                 yOffset += pdfHeight + 10;
             } catch (err) {
                 console.error("Erro ao capturar elemento para PDF:", err);
