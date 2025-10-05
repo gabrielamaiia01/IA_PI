@@ -18,9 +18,6 @@
                     <li class="active"><a href="/agrupamentos">Agrupamentos</a></li>
                 </ul>
             </nav>
-            <div class="settings">
-                <a href="#">Configurações</a>
-            </div>
         </aside>
 
         <main class="main-content">
@@ -75,12 +72,14 @@
                 <div class="chart-row">
                     <div class="chart-card">
                         <h3>Projeção dos Componentes Principais</h3>
+                        <div class="chart-type">Scatterplot</div>
                         <div class="chart-placeholder">
                            <canvas id="pca-scatter" width="450" height="300"></canvas>
                         </div>
                     </div>
                     <div class="chart-card">
                         <h3>Método do Cotovelo</h3>
+                        <div class="chart-type">Linha</div>
                         <div class="chart-placeholder">
                            <img id="elbow-plot" width="300" alt="Método do Cotovelo">
                         </div>
@@ -89,6 +88,7 @@
 
                 <div class="chart-card full-width">
                     <h3>Perfil médio dos clusters</h3>
+                    <div class="chart-type">Barras</div>
                     <div class="chart-placeholder">
                        <img id="cluster-profile" width="400" alt="Perfil médio dos clusters">
                     </div>

@@ -313,7 +313,7 @@ def agrupamentos_data():
     df_cluster_profile = df.groupby("cluster")[colunas].mean()
 
     # Remove colunas geográficas (se existirem)
-    for col_geo in ["cisp", "aisp", "risp", "mcirc"]:
+    for col_geo in ["cisp", "aisp", "risp", "mcirc", "ano"]:
         if col_geo in df_cluster_profile.columns:
             df_cluster_profile = df_cluster_profile.drop(columns=[col_geo])
 

@@ -25,9 +25,6 @@
                     <li><a href="/agrupamentos">Agrupamentos</a></li>
                 </ul>
             </nav>
-            <div class="settings">
-                <a href="#">Configurações</a>
-            </div>
         </aside>
 
         <main class="main-content">
@@ -111,12 +108,15 @@
                     <div class="chart-card full-width">
                         <h3>Mapa de Letalidade violenta</h3>
                         <label for="map-group">Mapa por:</label>
-                        <select id="map-group">
-                            <option value="mcirc">Município</option>
-                            <option value="cisp">CISP</option>
-                            <option value="aisp">AISP</option>
-                            <option value="risp">RISP</option>
-                        </select>
+                        <div class="map-controls">
+                            <select id="map-group">
+                                <option value="mcirc">Município</option>
+                                <option value="cisp">CISP</option>
+                                <option value="aisp">AISP</option>
+                                <option value="risp">RISP</option>
+                            </select>
+                            <div class="chart-type">Heatmap</div>
+                        </div>
                         <div id="map-container" class="chart-placeholder" style="height: 300px;">
                             <img id="map-img" alt="Mapa de letalidade violenta" style="height:100%; object-fit:contain;">
                         </div>
