@@ -4,19 +4,22 @@ let municipios = [];
 document.addEventListener("DOMContentLoaded", async () => {
     const inputMunicipio = document.getElementById("municipio");
     const datalist = document.getElementById("lista-municipios");
-    const mapImg = document.getElementById("map-img"); // caso tenha mapa
+    const mapImg = document.getElementById("map-img");
 
     // ===========================
     // Carregar municípios
     // ===========================
     try {
         const response = await fetch("/api/municipios");
+        if (!response.ok) throw new Error(`Erro HTTP ${response.status}`);
         municipios = await response.json();
     } catch (err) {
         console.error("Erro ao carregar municípios:", err);
     }
 
-    // Preencher datalist conforme o usuário digita
+    // ===========================
+    // Autocomplete
+    // ===========================
     inputMunicipio.addEventListener("input", () => {
         const valor = inputMunicipio.value.toLowerCase();
         datalist.innerHTML = "";
@@ -30,7 +33,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
 
     // ===========================
-    // Função para gerar gráficos
+    // Gerar gráficos
     // ===========================
     async function gerarGraficos() {
         const k = document.getElementById("num-clusters").value;
@@ -39,15 +42,15 @@ document.addEventListener("DOMContentLoaded", async () => {
         const municipio = inputMunicipio.value;
 
         try {
-            const params = new URLSearchParams();
-            params.append("k", k);
+            const params = new URLSearchParams({ k });
             if (inicio) params.append("inicio", inicio);
             if (fim) params.append("fim", fim);
             if (municipio) params.append("municipio", municipio);
 
             const res = await fetch(`/api/agrupamentos_data?${params.toString()}`);
-            const data = await res.json();
+            if (!res.ok) throw new Error(`Erro HTTP ${res.status}`);
 
+            const data = await res.json();
             if (data.error) {
                 alert(data.error);
                 return;
@@ -87,11 +90,34 @@ document.addEventListener("DOMContentLoaded", async () => {
                 }
             });
 
-            // Atualiza imagens do backend
-            if (document.getElementById("cluster-profile") && data.perfil_medio_img)
-                document.getElementById("cluster-profile").src = `${data.perfil_medio_img}?v=${new Date().getTime()}`;
-            if (document.getElementById("elbow-plot") && data.cotovelo_img)
-                document.getElementById("elbow-plot").src = `${data.cotovelo_img}?v=${new Date().getTime()}`;
+            // ===========================
+            // Gráfico de importância (Chart.js)
+            // ===========================
+            if (data.importancias) {
+                const div = document.getElementById("elbow-plot");
+                div.innerHTML = '<canvas id="importancia-chart"></canvas>';
+                const ctx2 = document.getElementById("importancia-chart").getContext("2d");
+                const labels = Object.keys(data.importancias);
+                const valores = Object.values(data.importancias);
+
+                chartInstance = new Chart(ctx2, {
+                    type: "scatter",
+                    data: { datasets },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false, // permite que ocupe mais espaço
+                        plugins: {
+                            legend: { position: "right" },
+                            title: { display: false } // remove o título
+                        },
+                        scales: {
+                            x: { title: { display: true, text: "Componente Principal 1" } },
+                            y: { title: { display: true, text: "Componente Principal 2" } }
+                        }
+                    }
+                });
+
+            }
 
         } catch (err) {
             console.error("Erro ao carregar dados de agrupamento:", err);
@@ -100,7 +126,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     // ===========================
-    // Função para atualizar mapa (opcional)
+    // Atualizar mapa
     // ===========================
     async function loadMapImage() {
         if (!mapImg) return;
@@ -131,7 +157,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             m => m.toLowerCase() === inputMunicipio.value.toLowerCase()
         );
 
-        // Só aplica se o município for válido ou vazio
         if (municipioValido || inputMunicipio.value === "") {
             await gerarGraficos();
             await loadMapImage();
@@ -140,13 +165,10 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // ===========================
-    // Evento apenas no botão “Aplicar”
-    // ===========================
     document.getElementById("btn-aplicar").addEventListener("click", aplicarFiltros);
 
     // ===========================
-    // Exportar PCA como PDF
+    // Exportar dashboard como PDF
     // ===========================
     document.getElementById("btn-export-pdf").addEventListener("click", async () => {
         const { jsPDF } = window.jspdf;
@@ -155,8 +177,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         const pageWidth = pdf.internal.pageSize.getWidth() - margin * 2;
         let yOffset = margin;
 
-        // Seleciona todos os gráficos que você quer exportar
-        const elementos = document.querySelectorAll("canvas, #cluster-profile, #elbow-plot");
+        const elementos = document.querySelectorAll("canvas, #map-img");
 
         for (let el of elementos) {
             try {
@@ -180,5 +201,4 @@ document.addEventListener("DOMContentLoaded", async () => {
 
         pdf.save("dashboard.pdf");
     });
-
 });

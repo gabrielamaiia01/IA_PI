@@ -705,3 +705,11 @@ body {
 .map-controls select {
     max-width: 250px;
 }
+
+/* Inputs desabilitados */
+input:disabled {
+    background-color: #e0e0e0; /* cinza claro */
+    color: #555; /* texto mais escuro */
+    cursor: not-allowed;
+    border-color: #ccc; /* borda levemente acinzentada */
+}

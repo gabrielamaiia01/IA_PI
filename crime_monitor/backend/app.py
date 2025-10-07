@@ -1,5 +1,6 @@
 from flask import Flask, render_template, jsonify, request
 import pandas as pd
+import numpy as np
 import os
 import geopandas as gpd
 import matplotlib
@@ -9,15 +10,20 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.cluster import KMeans
 from sklearn.impute import SimpleImputer
 from sklearn.decomposition import PCA
-import numpy as np
-from flask import Flask, jsonify, request
-import pandas as pd
-import numpy as np
-import os
+import pickle
+import psycopg2
 
-app = Flask(__name__, static_folder='../frontend/static', template_folder='../frontend/pages')
+app = Flask(
+    __name__,
+    static_folder='../frontend/static',
+    template_folder='../frontend/pages'
+)
 
+# ===========================
+# Paths e configurações
+# ===========================
 DATA_PATH = 'backend/data/BaseDPEvolucaoMensalCisp.csv'
+MODEL_PATH = 'models/model.pkl'
 
 SHAPEFILES = {
     "mcirc": "backend/data/RJ_Municipios_2024.shp",
@@ -36,9 +42,155 @@ COLUMN_MAPPING = {
     "risp": "risp"
 }
 
+# =======================
+# Carregar modelo
+# =======================
+model = None
+feature_names = [
+    'cisp', 'mes', 'ano', 'mcirc', 'tentat_hom', 'estupro',
+    'lesao_corp_culposa', 'roubo_veiculo', 'estelionato',
+    'apreensao_drogas', 'trafico_drogas', 'apf',
+    'pessoas_desaparecidas', 'encontro_cadaver', 'registro_ocorrencias'
+]
+
+try:
+    model_path = os.path.join(os.path.dirname(__file__), MODEL_PATH)
+    with open(model_path, 'rb') as f:
+        model = pickle.load(f)
+    print(f"✓ Modelo carregado com sucesso! ({type(model).__name__})")
+except Exception as e:
+    print(f"✗ Erro ao carregar modelo: {e}")
+
+# ===========================
+# Função para carregar dados
+# ===========================
 def load_data():
     df = pd.read_csv(DATA_PATH, sep=";", encoding="latin1")
     return df
+
+def get_soma_mes_anterior(df, mes, ano):
+    if mes == 1:
+        mes_anterior = 12
+        ano_anterior = ano - 1
+    else:
+        mes_anterior = mes - 1
+        ano_anterior = ano
+
+    df_filtrado = df[(df['mes'] == mes_anterior) & (df['ano'] == ano_anterior)]
+    if df_filtrado.empty:
+        return None
+
+    return df_filtrado['letalidade_violenta'].sum()
+
+def gerar_drivers_principais(df, features_dict, importance_dict):
+    drivers = []
+    mes = int(features_dict['mes'])
+    ano = int(features_dict['ano'])
+
+    for feature, importance in sorted(importance_dict.items(), key=lambda x: x[1], reverse=True):
+        if importance < 0.01 or feature in ['cisp', 'mes', 'ano']:
+            continue
+
+        mes_anterior = mes - 1 if mes > 1 else 12
+        ano_anterior = ano if mes > 1 else ano - 1
+        df_mes_anterior = df[(df['mes'] == mes_anterior) & (df['ano'] == ano_anterior)]
+
+        if df_mes_anterior.empty or feature not in df_mes_anterior.columns:
+            continue
+
+        valor_anterior = df_mes_anterior[feature].sum()
+        valor_atual = features_dict.get(feature, 0)
+
+        if valor_anterior is None or valor_anterior == 0:
+            continue
+
+        diff_percent = (valor_atual - valor_anterior) / valor_anterior * 100
+
+        if diff_percent > 3:
+            frase = f"aumento de {feature.replace('_', ' ')} (+{round(diff_percent)}%)"
+        elif diff_percent < -3:
+            frase = f"queda de {feature.replace('_', ' ')} ({round(diff_percent)}%)"
+        else:
+            frase = f"{feature.replace('_', ' ')} estável"
+
+        drivers.append(frase)
+        if len(drivers) >= 3:
+            break
+
+    return ", ".join(drivers)
+
+def classificar_tendencia(pred, soma_mes_ant):
+    if soma_mes_ant is None or soma_mes_ant == 0:
+        return "Sem dados suficientes"
+
+    diff_ratio = (pred - soma_mes_ant) / soma_mes_ant
+
+    if diff_ratio <= -0.2:
+        return "Queda significativa"
+    elif diff_ratio <= -0.05:
+        return "Leve queda"
+    elif diff_ratio < 0.05:
+        return "Estável"
+    elif diff_ratio < 0.2:
+        return "Leve aumento"
+    else:
+        return "Aumento significativo"
+
+def classificar_risco(pred, df):
+    vals = df['letalidade_violenta'][df['letalidade_violenta'] > 0]
+    if vals.empty:
+        return "Baixo"
+
+    q33 = vals.quantile(0.33)
+    q66 = vals.quantile(0.66)
+
+    if pred <= max(q33, 5):
+        return "Baixo"
+    elif pred <= max(q66, 10):
+        return "Moderado"
+    else:
+        return "Alto"
+
+def salvar_previsao_banco(features_dict, prediction_value):
+    try:
+        conn = psycopg2.connect(
+            dbname="crimes_RJ",
+            user="postgres",
+            password="crimes",
+            host="localhost",
+            port="5432"
+        )
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO crimes_RJ.dados_previstos
+            (cisp, mcirc, mes, ano, letalidade_violenta, tentat_hom, estupro,
+             lesao_corp_culposa, roubo_veiculo, estelionato, apreensao_drogas,
+             trafico_drogas, apf, pessoas_desaparecidas, encontro_cadaver, registro_ocorrencias)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """, (
+            int(features_dict['cisp']),
+            int(features_dict['mcirc']),
+            int(features_dict['mes']),
+            int(features_dict['ano']),
+            int(round(prediction_value)),
+            int(features_dict.get('tentat_hom', 0)),
+            int(features_dict.get('estupro', 0)),
+            int(features_dict.get('lesao_corp_culposa', 0)),
+            int(features_dict.get('roubo_veiculo', 0)),
+            int(features_dict.get('estelionato', 0)),
+            int(features_dict.get('apreensao_drogas', 0)),
+            int(features_dict.get('trafico_drogas', 0)),
+            int(features_dict.get('apf', 0)),
+            int(features_dict.get('pessoas_desaparecidas', 0)),
+            int(features_dict.get('encontro_cadaver', 0)),
+            int(features_dict.get('registro_ocorrencias', 0))
+        ))
+        conn.commit()
+        cursor.close()
+        conn.close()
+        print("Previsão inserida com sucesso no banco!")
+    except Exception as e:
+        print("Erro ao inserir previsão no banco:", e)
 
 # ===========================
 # Rotas de páginas
@@ -56,7 +208,7 @@ def agrupamentos():
     return render_template('agrupamentos.html')
 
 # ===========================
-# Dashboard
+# API - Dashboard
 # ===========================
 @app.route('/api/dashboard_data')
 def dashboard_data():
@@ -120,14 +272,14 @@ def dashboard_data():
     if len(df_grouped) > 1:
         prev_row = df_grouped.iloc[-2]
         hom_prev = prev_row["hom_doloso"]
-        homicidios_dolosos_pct = ((homicidios_dolosos - hom_prev)/hom_prev*100) if hom_prev>0 else None
+        homicidios_dolosos_pct = ((homicidios_dolosos - hom_prev)/hom_prev*100) if hom_prev > 0 else None
 
     ano_atual, mes_atual = latest_row["ano"], latest_row["mes"]
-    latro_ano_ant = df_grouped[(df_grouped["ano"]==ano_atual-1)&(df_grouped["mes"]==mes_atual)]
+    latro_ano_ant = df_grouped[(df_grouped["ano"] == ano_atual - 1) & (df_grouped["mes"] == mes_atual)]
     variacao_latrocinio_anual = None
     if not latro_ano_ant.empty:
         lat_ant = latro_ano_ant.iloc[0]["latrocinio"]
-        variacao_latrocinio_anual = ((latrocinios - lat_ant)/lat_ant*100) if lat_ant>0 else None
+        variacao_latrocinio_anual = ((latrocinios - lat_ant)/lat_ant*100) if lat_ant > 0 else None
 
     tendencia_interv = "Indefinida"
     if len(df_grouped) >= 4:
@@ -146,9 +298,11 @@ def dashboard_data():
         columns={"Periodo":"x","letalidade_violenta":"y"}
     ).to_dict(orient="records")
 
-    col_corr = ["tentat_hom", "lesao_corp_culposa", "estupro", "estelionato", 
-                "apreensao_drogas","trafico_drogas","apf","pessoas_desaparecidas",
-                "encontro_cadaver","registro_ocorrencias"]
+    col_corr = [
+        "tentat_hom", "lesao_corp_culposa", "estupro", "estelionato", 
+        "apreensao_drogas","trafico_drogas","apf","pessoas_desaparecidas",
+        "encontro_cadaver","registro_ocorrencias"
+    ]
     correlacao_dict = df_grouped[["letalidade_violenta"] + col_corr].corr()["letalidade_violenta"].drop("letalidade_violenta").to_dict()
 
     scatter_data = []
@@ -170,7 +324,7 @@ def dashboard_data():
     })
 
 # ===========================
-# Municípios
+# API - Municípios
 # ===========================
 @app.route("/api/municipios")
 def get_municipios():
@@ -182,7 +336,7 @@ def get_municipios():
     return jsonify(municipios)
 
 # ===========================
-# Mapa geográfico
+# API - Mapa geográfico
 # ===========================
 @app.route("/api/map_image/<group_by>")
 def map_image(group_by):
@@ -209,7 +363,6 @@ def map_image(group_by):
     if municipio and "NM_MUN" in gdf.columns:
         gdf = gdf[gdf["NM_MUN"] == municipio]
 
-    # Junta dados e gera mapa
     df_grouped = df.groupby(group_by)["letalidade_violenta"].sum().reset_index()
     df_grouped[group_by] = df_grouped[group_by].astype(str)
     gdf[shapefile_col] = gdf[shapefile_col].astype(str)
@@ -217,20 +370,134 @@ def map_image(group_by):
     gdf["letalidade_violenta"] = gdf["letalidade_violenta"].fillna(0)
 
     fig, ax = plt.subplots(1, 1, figsize=(10, 10))
-    gdf.plot(column="letalidade_violenta", cmap="YlOrRd", linewidth=0.8, ax=ax, edgecolor='0.8', legend=True)
+    gdf.plot(
+        column="letalidade_violenta",
+        cmap="YlOrRd",
+        linewidth=0.8,
+        ax=ax,
+        edgecolor='0.8',
+        legend=True
+    )
     ax.set_axis_off()
     plt.title("Letalidade Violenta", fontsize=15)
 
     params_str = f"{group_by}_{inicio}_{fim}_{municipio}".replace(" ", "_").replace(":", "_")
     image_name = f"{params_str}.png"
     image_path = os.path.join(MAP_FOLDER, image_name)
-    plt.savefig(image_path, bbox_inches='tight', dpi=150)
+    plt.savefig(image_path, bbox_inches="tight")
     plt.close(fig)
 
     return jsonify({"image_url": f"/static/img/{image_name}"})
 
 # ===========================
-# Agrupamentos (KMeans)
+# API - Features do modelo
+# ===========================
+@app.route('/api/model_features')
+def model_features():
+    return jsonify(feature_names)
+
+# ===========================
+# API - Previsão
+# ===========================
+@app.route('/api/previsao', methods=['POST'])
+def previsao_api():
+    global model
+    df = load_data()
+    data = request.get_json()
+    if not model:
+        return jsonify({"error": "Modelo não carregado"}), 500
+
+    X = pd.DataFrame([data['features']], columns=feature_names)
+    pred = model.predict(X)[0]
+
+    df_hist = df.groupby(['ano', 'mes'])['letalidade_violenta'].sum().reset_index()
+    df_hist = df_hist.sort_values(['ano','mes'])
+    
+    # Intervalo 95% via bootstrap
+    preds_boot = []
+    for _ in range(1000):
+        sample = df_hist['letalidade_violenta'].sample(len(df_hist), replace=True)
+        # Simula pequenas variações na previsão
+        preds_boot.append(pred + (sample.mean() - df_hist['letalidade_violenta'].mean()))
+    lower = max(np.percentile(preds_boot, 2.5), 0)
+    upper = np.percentile(preds_boot, 97.5)
+
+    mes = int(data['features'][1])
+    ano = int(data['features'][2])
+    soma_mes_ant = get_soma_mes_anterior(df, mes, ano)
+
+    tendencia = classificar_tendencia(pred, soma_mes_ant)
+    risco = classificar_risco(pred, df)
+
+    # Importância das features 
+    importance = model.booster_.feature_importance(importance_type='gain').tolist()
+    importance_dict = {f: np.random.rand() for f in feature_names}  # exemplo random
+    drivers = gerar_drivers_principais(df, dict(zip(feature_names, data['features'])), importance_dict)
+
+    salvar_previsao_banco(dict(zip(feature_names, data['features'])), pred)
+
+    # ==== HISTÓRICO PARA O GRÁFICO COM PREVISÕES ====
+    # Histórico real
+    historico_labels = df_hist.apply(lambda row: f"{int(row['ano'])}-{int(row['mes']):02d}", axis=1).tolist()
+    historico_valores = df_hist['letalidade_violenta'].tolist()
+
+    # Dados previstos do banco
+    import psycopg2
+    conn = psycopg2.connect(
+        dbname="crimes_RJ", user="postgres", password="crimes",
+        host="localhost", port="5432"
+    )
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT ano, mes, SUM(letalidade_violenta) 
+        FROM crimes_RJ.dados_previstos 
+        GROUP BY ano, mes 
+        ORDER BY ano, mes
+    """)
+    prev_data = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    
+    prev_labels = [f"{row[0]}-{row[1]:02d}" for row in prev_data]
+    prev_valores = [row[2] for row in prev_data]
+
+    # ===============================
+    # Intervalos 95% alinhados para gráfico de linha
+    # ===============================
+    interval_95_lower = []
+    interval_95_upper = []
+
+    for label, val in zip(prev_labels, prev_valores):
+        ano_val, mes_val = map(int, label.split('-'))
+        std_dev = df_hist.loc[(df_hist['ano']==ano_val) & (df_hist['mes']==mes_val), 'letalidade_violenta'].std()
+        if np.isnan(std_dev) or std_dev == 0:
+            std_dev = 1  # fallback
+        interval_95_lower.append(max(val - 1.96*std_dev, 0))
+        interval_95_upper.append(val + 1.96*std_dev)
+
+    # Adiciona a previsão do próximo mês
+    std_dev_prev = df_hist['letalidade_violenta'].tail(3).std() if len(df_hist) >= 3 else 1
+    interval_95_lower.append(max(pred - 1.96*std_dev_prev, 0))
+    interval_95_upper.append(pred + 1.96*std_dev_prev)
+
+    return jsonify({
+        "success": True,
+        "previsao_leitura": pred,
+        "intervalo_95": [lower, upper],
+        "tendencia": tendencia,
+        "risco": risco,
+        "drivers": drivers,
+        'feature_importance': {k: float(v) for k, v in dict(zip(feature_names, importance)).items()},
+        "historico_labels": historico_labels,
+        "historico_valores": historico_valores,
+        "prev_labels": prev_labels,
+        "prev_valores": prev_valores,
+        "interval_95_lower": interval_95_lower,
+        "interval_95_upper": interval_95_upper
+    })
+
+# ===========================
+# API - Agrupamentos
 # ===========================
 @app.route("/api/agrupamentos_data")
 def agrupamentos_data():
@@ -240,15 +507,14 @@ def agrupamentos_data():
     fim = request.args.get("fim")
     municipio = request.args.get("municipio")
 
-    # ===============================
-    # 🔹 Filtragem por data e município
-    # ===============================
+    # Filtragem por data
     df["data"] = pd.to_datetime(df["ano"].astype(str) + "-" + df["mes"].astype(str) + "-01")
-
     if inicio:
         df = df[df["data"] >= pd.to_datetime(inicio)]
     if fim:
         df = df[df["data"] <= pd.to_datetime(fim)]
+
+    # Filtragem por município
     if municipio:
         try:
             gdf_mun = gpd.read_file(SHAPEFILES["mcirc"])[["CD_MUN", "NM_MUN"]]
@@ -262,66 +528,58 @@ def agrupamentos_data():
     if df.empty:
         return jsonify({"error": "Sem dados após filtragem."}), 400
 
-    # ===============================
-    # 🔹 Seleção de colunas numéricas
-    # ===============================
+    # Seleção e exclusão das variáveis
     dados_cluster = df.select_dtypes(include=[np.number]).drop(columns=[
-        'hom_doloso','lesao_corp_morte','latrocinio','cvli','hom_por_interv_policial',
-        'ameaca','total_roubos','recuperacao_veiculos','fase','encontro_ossada',
-        'furto_bicicleta','sequestro','lesao_corp_dolosa','roubo_conducao_saque',
-        'sequestro_relampago','roubo_banco','roubo_bicicleta','roubo_residencia',
-        'furto_coletivo','posse_drogas','roubo_comercio','extorsao','roubo_cx_eletronico',
-        'roubo_apos_saque','pol_civis_mortos_serv','hom_culposo','furto_celular',
-        'furto_transeunte','cmba','mes','pol_militares_mortos_serv','total_furtos',
-        'aaapai','furto_veiculos','roubo_transeunte','cmp','risp','roubo_celular',
-        'outros_furtos','roubo_rua','apreensao_drogas_sem_autor','roubo_em_coletivo',
-        'outros_roubos','roubo_carga'
-    ], errors='ignore')
+        'hom_doloso', 'lesao_corp_morte', 'latrocinio', 'cvli', 'hom_por_interv_policial', 
+        'ameaca', 'total_roubos', 'recuperacao_veiculos', 'fase', 'encontro_ossada', 
+        'furto_bicicleta', 'sequestro', 'lesao_corp_dolosa', 'roubo_conducao_saque', 
+        'sequestro_relampago', 'roubo_banco', 'roubo_bicicleta', 'roubo_residencia', 
+        'furto_coletivo', 'posse_drogas', 'roubo_comercio', 'extorsao', 'roubo_cx_eletronico', 
+        'roubo_apos_saque', 'pol_civis_mortos_serv', 'hom_culposo', 'furto_celular',
+        'furto_transeunte', 'cmba', 'aisp', 'pol_militares_mortos_serv', 'total_furtos', 
+        'aaapai', 'furto_veiculos', 'roubo_transeunte', 'cmp', 'risp', 'roubo_celular', 
+        'outros_furtos', 'roubo_rua', 'apreensao_drogas_sem_autor', 'roubo_em_coletivo', 
+        'outros_roubos', 'roubo_carga'
+    ])
 
     if dados_cluster.empty:
         return jsonify({"error": "Sem dados numéricos para agrupar."}), 400
 
-    # ===============================
-    # 🔹 Imputação e normalização
-    # ===============================
+    # Imputação e normalização
     colunas = dados_cluster.columns
-    imputer = SimpleImputer(strategy="mean")
-    dados_imp = pd.DataFrame(imputer.fit_transform(dados_cluster), columns=colunas)
-    scaler = StandardScaler()
-    dados_scaled = scaler.fit_transform(dados_imp)
+    dados_imp = pd.DataFrame(
+        SimpleImputer(strategy="mean").fit_transform(dados_cluster),
+        columns=colunas
+    )
+    dados_scaled = StandardScaler().fit_transform(dados_imp)
 
-    # ===============================
-    # 🔹 KMeans clustering
-    # ===============================
+    # KMeans clustering
     kmeans = KMeans(n_clusters=k, random_state=42)
     clusters = kmeans.fit_predict(dados_scaled)
     df['cluster'] = clusters
     media_clusters = df.groupby('cluster')[colunas].mean().round(2).to_dict(orient="index")
 
-    # ===============================
-    # 🔹 PCA 2D
-    # ===============================
+    # PCA 2D
     pca = PCA(n_components=2)
     pca_result = pca.fit_transform(dados_scaled)
     pca_df = pd.DataFrame(pca_result, columns=["pca1", "pca2"])
     pca_df["cluster"] = clusters
     pca_data = pca_df.to_dict(orient="records")
 
-    # ===============================
-    # 🔹 Perfil médio dos clusters
-    # ===============================
+    # Perfil médio dos clusters
     df_cluster_profile = df.groupby("cluster")[colunas].mean()
 
-    # Remove colunas geográficas (se existirem)
-    for col_geo in ["cisp", "aisp", "risp", "mcirc", "ano"]:
+    # Remove colunas geográficas
+    for col_geo in ["cisp", "aisp", "risp", "mcirc", "ano", "mes"]:
         if col_geo in df_cluster_profile.columns:
             df_cluster_profile = df_cluster_profile.drop(columns=[col_geo])
 
     # Normaliza para visualização
-    df_norm = (df_cluster_profile - df_cluster_profile.min()) / (df_cluster_profile.max() - df_cluster_profile.min())
+    df_norm = (df_cluster_profile - df_cluster_profile.min()) / \
+              (df_cluster_profile.max() - df_cluster_profile.min())
 
     perfil_img_path = os.path.join(MAP_FOLDER, f"perfil_medio_{k}.png")
-    fig1, ax1 = plt.subplots(figsize=(12,6))
+    fig1, ax1 = plt.subplots(figsize=(12, 6))
     df_norm.plot(kind="bar", ax=ax1)
     ax1.set_title("Perfil médio dos clusters (valores normalizados)")
     ax1.set_ylabel("Intensidade relativa")
@@ -330,36 +588,25 @@ def agrupamentos_data():
     fig1.savefig(perfil_img_path, dpi=150)
     plt.close(fig1)
 
-    # ===============================
-    # 🔹 Método do cotovelo
-    # ===============================
-    inertia = []
-    K_range = range(2, 10)
-    for k_elbow in K_range:
-        kmeans_elbow = KMeans(n_clusters=k_elbow, random_state=42)
-        kmeans_elbow.fit(dados_scaled)
-        inertia.append(kmeans_elbow.inertia_)
+    # Importância das variáveis
+    importances = {}
+    for col in dados_cluster.columns:
+        group_means = df.groupby('cluster')[col].mean()
+        inter = np.var(group_means)
+        intra = np.mean(df.groupby('cluster')[col].var())
+        importances[col] = inter / (intra + 1e-6)
+    importances_series = pd.Series(importances).sort_values(ascending=False)
 
-    cotovelo_img_path = os.path.join(MAP_FOLDER, f"cotovelo_{k}.png")
-    fig2, ax2 = plt.subplots(figsize=(8,5))
-    ax2.plot(K_range, inertia, 'bo-')
-    ax2.set_xlabel("Número de Clusters")
-    ax2.set_ylabel("Inertia")
-    ax2.set_title("Método do Cotovelo")
-    plt.tight_layout()
-    fig2.savefig(cotovelo_img_path, dpi=150)
-    plt.close(fig2)
-
-    # ===============================
-    # 🔹 Retorno JSON final
-    # ===============================
     return jsonify({
         "media_clusters": media_clusters,
         "pca_data": pca_data,
         "explained_variance": [round(v, 3) for v in pca.explained_variance_ratio_],
         "perfil_medio_img": f"/static/img/perfil_medio_{k}.png",
-        "cotovelo_img": f"/static/img/cotovelo_{k}.png"
+        "importancias": importances_series.to_dict()
     })
 
+# ===========================
+# Main
+# ===========================
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(host="127.0.0.1", port=5000, debug=True)

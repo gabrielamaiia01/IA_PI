@@ -4,7 +4,91 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Monitor RJ - Previsão</title>
-    <link rel="stylesheet" href="../static/css/style.css">
+    <link rel="stylesheet" href="/static/css/style.css">
+    <style>
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin: 20px 0;
+        }
+        
+        .form-field {
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .form-field label {
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #333;
+            font-size: 14px;
+        }
+        
+        .form-field input {
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+        
+        .form-field input:focus {
+            outline: none;
+            border-color: #4CAF50;
+        }
+        
+        .form-field input::placeholder {
+            color: #999;
+        }
+        
+        .generate-button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 12px 32px;
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.3s;
+            margin-top: 20px;
+        }
+        
+        .generate-button:hover {
+            background: #45a049;
+        }
+        
+        .generate-button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        
+        .loading {
+            display: none;
+            color: #666;
+            font-style: italic;
+            margin-top: 10px;
+        }
+        
+        .error-message {
+            display: none;
+            background: #ffebee;
+            color: #c62828;
+            padding: 12px;
+            border-radius: 4px;
+            margin-top: 10px;
+        }
+        
+        .success-message {
+            display: none;
+            background: #e8f5e9;
+            color: #2e7d32;
+            padding: 12px;
+            border-radius: 4px;
+            margin-top: 10px;
+        }
+    </style>
 </head>
 <body>
     <div class="container">
@@ -14,38 +98,94 @@
                 <ul>
                     <li><a href="/">Dashboard</a></li>
                     <li class="active"><a href="/previsao">Previsão</a></li>
-                    <li><a href="/agrupamentos">Agrupamentos</a></li>
+                    <li><a href="#">Relatórios</a></li>
                 </ul>
             </nav>
+            <div class="settings">
+                <a href="#">Configurações</a>
+            </div>
         </aside>
+
         <main class="main-content">
             <header class="header">
                 <h1>Monitor de Letalidade Violenta - RJ</h1>
                 <span class="updated-date">Atualizado: Ago/2025</span>
             </header>
+
             <section class="prediction-controls">
-                <h2>Previsão</h2>
-                <div class="control-group">
-                    <div class="control-item">
-                        <label for="periodo-futuro">Período futuro</label>
-                        <select id="periodo-futuro">
-                            <option>Escolha o mês</option>
-                        </select>
+                <h2>Previsão com Modelo LightGBM</h2>
+                <p style="color: #666; margin-bottom: 20px;">Preencha as variáveis abaixo para gerar uma previsão de letalidade violenta.</p>
+                
+                <form id="prediction-form">
+                    <div class="form-grid">
+                        <!-- Campos do formulário aqui (igual ao que você já tinha) -->
+                        <div class="form-field">
+                            <label for="cisp">CISP (Código da Delegacia)</label>
+                            <input type="number" id="cisp" name="cisp" placeholder="Ex: 1" required>
+                        </div>
+                        <div class="form-field">
+                            <label for="mes">Mês (1-12)</label>
+                            <input type="number" id="mes" name="mes" min="1" max="12" placeholder="Ex: 8" required>
+                        </div>
+                        <div class="form-field">
+                            <label for="ano">Ano</label>
+                            <input type="number" id="ano" name="ano" placeholder="Ex: 2025" required>
+                        </div>
+                        <div class="form-field">
+                            <label for="mcirc">MCIRC (Município/Circunscrição)</label>
+                            <input type="number" id="mcirc" name="mcirc"  value="7" disabled>
+                        </div>
+                        <div class="form-field">
+                            <label for="tentat_hom">Tentativa de Homicídio</label>
+                            <input type="number" id="tentat_hom" name="tentat_hom" placeholder="Ex: 15" required>
+                        </div>
+                        <div class="form-field">
+                            <label for="estupro">Estupro</label>
+                            <input type="number" id="estupro" name="estupro"  value="8" disabled>
+                        </div>
+                        <div class="form-field">
+                            <label for="lesao_corp_culposa">Lesão Corporal Culposa</label>
+                            <input type="number" id="lesao_corp_culposa" name="lesao_corp_culposa" placeholder="Ex: 25" required>
+                        </div>
+                        <div class="form-field">
+                            <label for="roubo_veiculo">Roubo de Veículo</label>
+                            <input type="number" id="roubo_veiculo" name="roubo_veiculo" placeholder="Ex: 120" required>
+                        </div>
+                        <div class="form-field">
+                            <label for="estelionato">Estelionato</label>
+                            <input type="number" id="estelionato" name="estelionato"  value="45" disabled>
+                        </div>
+                        <div class="form-field">
+                            <label for="apreensao_drogas">Apreensão de Drogas</label>
+                            <input type="number" id="apreensao_drogas" name="apreensao_drogas"  value="50" disabled>
+                        </div>
+                        <div class="form-field">
+                            <label for="trafico_drogas">Tráfico de Drogas</label>
+                            <input type="number" id="trafico_drogas" name="trafico_drogas"  value="50" disabled>
+                        </div>
+                        <div class="form-field">
+                            <label for="apf">APF (Apreensão de Arma de Fogo)</label>
+                            <input type="number" id="apf" name="apf"  value="12" disabled>
+                        </div>
+                        <div class="form-field">
+                            <label for="pessoas_desaparecidas">Pessoas Desaparecidas</label>
+                            <input type="number" id="pessoas_desaparecidas" name="pessoas_desaparecidas"  value="5" disabled>
+                        </div>
+                        <div class="form-field">
+                            <label for="encontro_cadaver">Encontro de Cadáver</label>
+                            <input type="number" id="encontro_cadaver" name="encontro_cadaver"  value="2" disabled>
+                        </div>
+                        <div class="form-field">
+                            <label for="registro_ocorrencias">Registro de Ocorrências</label>
+                            <input type="number" id="registro_ocorrencias" name="registro_ocorrencias" placeholder="Ex: 850" required>
+                        </div>
                     </div>
-                    <div class="control-item">
-                        <label for="regiao-previsao">Região</label>
-                        <select id="regiao-previsao">
-                            <option>Estado do RJ</option>
-                        </select>
-                    </div>
-                     <div class="control-item">
-                        <label for="regiao-previsao">Municipio</label>
-                        <select id="regiao-previsao">
-                            <option>Municipio do RJ</option>
-                        </select>
-                    </div>
-                    <button class="generate-button">Gerar Previsão</button>
-                </div>
+                    
+                    <button type="submit" class="generate-button" id="generate-btn">Gerar Previsão</button>
+                    <div class="loading" id="loading">Processando previsão...</div>
+                    <div class="error-message" id="error-message"></div>
+                    <div class="success-message" id="success-message">Previsão gerada com sucesso!</div>
+                </form>
             </section>
             <section class="prediction-charts">
                 <div class="chart-card full-width">
@@ -53,11 +193,13 @@
                     <div class="legend">
                         <span class="legend-item"><span class="dot historic"></span> Histórico</span>
                         <span class="legend-item"><span class="dot prediction"></span> Previsão</span>
-                       
                     </div>
-                    <div class="chart-placeholder"></div>
+                    <div class="chart-placeholder">  
+                        <canvas id="historicoPrevisaoChart" style="max-width: 100%; height: 300px;"></canvas>
+                    </div>
                 </div>
             </section>
+
             <section class="prediction-details">
                 <div class="details-summary">
                     <div class="summary-header">
@@ -67,41 +209,45 @@
                     <div class="summary-content">
                         <div class="kpi-card">
                             <h3>Letalidade violenta prevista</h3>
-                            <p class="value" id="previsao_leitura">1.190</p>
-                            <p class="description">Com base em séries temporais e correlações</p>
+                            <p class="value" id="previsao_leitura">-</p>
+                            <p class="description">Com base no modelo LightGBM</p>
                         </div>
                         <div class="highlight-box">
-                            <p id="detalhes_previsao">Drivers principais: queda de roubos de rua (-4%), sazonalidade pós-feriado, operações policiais estáveis.</p>
+                            <p id="drivers_principais">Preencha o formulário acima e clique em "Gerar Previsão" para obter resultados.</p>
                         </div>
                     </div>
                 </div>
+
                 <div class="details-factors">
                     <div class="factors-header">
                         <h3>Contribuição por fator</h3>
                         <span class="tab active">Barras</span>
                     </div>
                     <div class="factors-content">
-                        <div class="chart-placeholder"></div>
+                        <!-- Container da tabela de importância corrigido -->
+                        <div id="contribuicaoContainer"></div>
                     </div>
                 </div>
             </section>
+
             <section class="prediction-kpis">
                 <div class="kpi-card">
-                    <h3>Previsão próxima leitura</h3>
-                    <p class="value" id="previsao_proxima_leitura">1.190</p>
+                    <h3>Risco</h3>
+                    <p class="value" id="risco">-</p>
                 </div>
                 <div class="kpi-card">
                     <h3>Intervalo 95%</h3>
-                    <p class="value" id="intervalo_95">1.120 - 1.260</p>
+                    <p class="value" id="intervalo_95">-</p>
                 </div>
                 <div class="kpi-card">
                     <h3>Tendência</h3>
-                    <p class="value" id="tendencia">Leve queda</p>
+                    <p class="value" id="tendencia">-</p>
                 </div>
             </section>
         </main>
     </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="/static/js/previsao.js"></script>
 </body>
 </html>
-
