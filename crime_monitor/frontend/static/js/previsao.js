@@ -30,7 +30,7 @@ document.addEventListener('DOMContentLoaded', () => {
     preencherMediasDisabled();
 
     // ======= Criação do gráfico com intervalo de confiança =======
-    function criarGraficoHistoricoPrevisao(historico_valores, historico_labels, prev_valores, intervalos_inferior, intervalos_superior) {
+    function criarGraficoHistoricoPrevisao(historico_valores, historico_labels, prev_valores, media_historica_valores, media_previsoes_valores) {
         const ctx = document.getElementById('historicoPrevisaoChart').getContext('2d');
         if (chartInstance) chartInstance.destroy();
 
@@ -40,38 +40,44 @@ document.addEventListener('DOMContentLoaded', () => {
                 labels: historico_labels,
                 datasets: [
                     {
-                        label: 'Histórico Real',
+                        label: 'Soma de histórico',
                         data: historico_valores,
-                        borderColor: 'blue',
-                        backgroundColor: 'rgba(0, 0, 255, 0.1)',
+                        borderColor: 'rgba(0, 123, 255, 1)',        // azul vibrante
+                        backgroundColor: 'rgba(0, 123, 255, 0.2)',  // azul translúcido
                         fill: true,
                         tension: 0.3,
+                        pointBackgroundColor: 'rgba(0, 123, 255, 1)',
+                        pointRadius: 3
                     },
                     {
-                        label: 'Previsões',
+                        label: 'Soma das previsões',
                         data: prev_valores,
-                        borderColor: 'orange',
-                        backgroundColor: 'rgba(255, 165, 0, 0.2)',
+                        borderColor: 'rgba(255, 165, 0, 1)',        // laranja forte
+                        backgroundColor: 'rgba(255, 165, 0, 0.2)',  // laranja translúcido
                         borderDash: [5, 5],
                         fill: true,
                         tension: 0.3,
+                        pointBackgroundColor: 'rgba(255, 165, 0, 1)',
+                        pointRadius: 3
                     },
                     {
-                        label: 'Intervalo de Confiança (95%)',
-                        data: intervalos_superior,
-                        borderColor: 'rgba(128,128,128,0.5)',
-                        fill: '+1', // Preenche entre o limite inferior e superior
-                        backgroundColor: 'rgba(128,128,128,0.2)',
-                        pointRadius: 0,
-                        tension: 0.3
+                        label: 'Média Histórica',
+                        data: media_historica_valores,
+                        borderColor: 'rgba(40, 167, 69, 1)',        // verde
+                        backgroundColor: 'rgba(40, 167, 69, 0.1)',
+                        fill: '+1', // preenche até o dataset acima
+                        tension: 0.3,
+                        pointRadius: 0
                     },
                     {
-                        label: 'Limite Inferior (95%)',
-                        data: intervalos_inferior,
-                        borderColor: 'rgba(128,128,128,0.5)',
-                        pointRadius: 0,
+                        label: 'Média de Previsões',
+                        data: media_previsoes_valores,
+                        borderColor: 'rgba(220, 53, 69, 1)',        // vermelho
+                        backgroundColor: 'rgba(220, 53, 69, 0.1)',
                         fill: false,
-                        tension: 0.3
+                        tension: 0.3,
+                        pointRadius: 0,
+                        borderDash: [3, 3]
                     }
                 ]
             },
@@ -176,8 +182,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 data.historico_valores,
                 data.historico_labels,
                 data.prev_valores,
-                data.interval_95_lower,
-                data.interval_95_upper
+                data.media_historica_valores,
+                data.media_previsoes_valores
             );
 
             mostrarFeatureImportance(data.feature_importance);

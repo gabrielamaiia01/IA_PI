@@ -1,14 +1,25 @@
 import psycopg2
 import pandas as pd
+from dotenv import load_dotenv
 
-# === 1. Conexão ao banco ===
+# === 1. Carregar variáveis do arquivo .env ===
+load_dotenv()
+
+DB_NAME = os.getenv("DB_NAME")
+DB_USER = os.getenv("DB_USER")
+DB_PASSWORD = os.getenv("DB_PASSWORD")
+DB_HOST = os.getenv("DB_HOST")
+DB_PORT = os.getenv("DB_PORT")
+
+# === 2. Conexão ao banco ===
 conn = psycopg2.connect(
-    dbname="crimes_RJ",
-    user="postgres",
-    password="crimes",
-    host="localhost",
-    port="5432"
+    dbname=DB_NAME,
+    user=DB_USER,
+    password=DB_PASSWORD,
+    host=DB_HOST,
+    port=DB_PORT
 )
+
 cursor = conn.cursor()
 
 # === 2. Carregar CSV ===

@@ -1,4 +1,5 @@
-let chartInstance = null;
+let chartInstanceScatter = null;
+let chartInstanceImportancia = null;
 let municipios = [];
 
 document.addEventListener("DOMContentLoaded", async () => {
@@ -6,9 +7,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     const datalist = document.getElementById("lista-municipios");
     const mapImg = document.getElementById("map-img");
 
-    // ===========================
     // Carregar municípios
-    // ===========================
     try {
         const response = await fetch("/api/municipios");
         if (!response.ok) throw new Error(`Erro HTTP ${response.status}`);
@@ -17,9 +16,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         console.error("Erro ao carregar municípios:", err);
     }
 
-    // ===========================
     // Autocomplete
-    // ===========================
     inputMunicipio.addEventListener("input", () => {
         const valor = inputMunicipio.value.toLowerCase();
         datalist.innerHTML = "";
@@ -32,9 +29,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             });
     });
 
-    // ===========================
     // Gerar gráficos
-    // ===========================
     async function gerarGraficos() {
         const k = document.getElementById("num-clusters").value;
         const inicio = document.getElementById("data-inicio").value;
@@ -56,14 +51,11 @@ document.addEventListener("DOMContentLoaded", async () => {
                 return;
             }
 
-            // ===========================
             // PCA Scatter
-            // ===========================
-            const canvas = document.getElementById("pca-scatter");
-            const ctx = canvas.getContext("2d");
-
+            const canvasScatter = document.getElementById("pca-scatter");
+            const ctxScatter = canvasScatter.getContext("2d");
             const clustersUnicos = [...new Set(data.pca_data.map(d => d.cluster))];
-            const datasets = clustersUnicos.map(c => ({
+            const datasetsScatter = clustersUnicos.map(c => ({
                 label: `Cluster ${c}`,
                 data: data.pca_data
                     .filter(d => d.cluster === c)
@@ -72,11 +64,11 @@ document.addEventListener("DOMContentLoaded", async () => {
                 backgroundColor: `hsl(${(c * 60) % 360}, 70%, 50%)`
             }));
 
-            if (chartInstance) chartInstance.destroy();
+            if (chartInstanceScatter) chartInstanceScatter.destroy();
 
-            chartInstance = new Chart(ctx, {
+            chartInstanceScatter = new Chart(ctxScatter, {
                 type: "scatter",
-                data: { datasets },
+                data: { datasets: datasetsScatter },
                 options: {
                     responsive: true,
                     plugins: {
@@ -90,68 +82,48 @@ document.addEventListener("DOMContentLoaded", async () => {
                 }
             });
 
-            // ===========================
-            // Gráfico de importância (Chart.js)
-            // ===========================
+            // Gráfico de importância (bar)
             if (data.importancias) {
                 const div = document.getElementById("elbow-plot");
                 div.innerHTML = '<canvas id="importancia-chart"></canvas>';
-                const ctx2 = document.getElementById("importancia-chart").getContext("2d");
+                const ctxImp = document.getElementById("importancia-chart").getContext("2d");
                 const labels = Object.keys(data.importancias);
                 const valores = Object.values(data.importancias);
 
-                chartInstance = new Chart(ctx2, {
-                    type: "scatter",
-                    data: { datasets },
+                if (chartInstanceImportancia) chartInstanceImportancia.destroy();
+
+                chartInstanceImportancia = new Chart(ctxImp, {
+                    type: "bar",
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            label: 'Importância na formação dos clusters',
+                            data: valores,
+                            backgroundColor: valores.map(v => v >= 0 ? 'rgba(75, 192, 192, 0.7)' : 'rgba(255, 99, 132, 0.7)'),
+                            borderColor: valores.map(v => v >= 0 ? 'rgba(75, 192, 192, 1)' : 'rgba(255, 99, 132, 1)'),
+                            borderWidth: 1
+                        }]
+                    },
                     options: {
                         responsive: true,
-                        maintainAspectRatio: false, // permite que ocupe mais espaço
-                        plugins: {
-                            legend: { position: "right" },
-                            title: { display: false } // remove o título
-                        },
+                        maintainAspectRatio: false, // respeita o tamanho do container
                         scales: {
-                            x: { title: { display: true, text: "Componente Principal 1" } },
-                            y: { title: { display: true, text: "Componente Principal 2" } }
-                        }
+                            y: { beginAtZero: true, title: { display: true, text: "Importância" } },
+                            x: { title: { display: true, text: "Variável" } }
+                        },
+                        plugins: { legend: { display: false } }
                     }
                 });
-
             }
-
+            if (document.getElementById("cluster-profile") && data.perfil_medio_img)
+                document.getElementById("cluster-profile").src = `${data.perfil_medio_img}?v=${new Date().getTime()}`;
+            
         } catch (err) {
             console.error("Erro ao carregar dados de agrupamento:", err);
             alert("Erro ao carregar dados. Veja o console para detalhes.");
         }
     }
-
-    // ===========================
-    // Atualizar mapa
-    // ===========================
-    async function loadMapImage() {
-        if (!mapImg) return;
-
-        const inicio = document.getElementById("data-inicio")?.value;
-        const fim = document.getElementById("data-fim")?.value;
-        const municipio = inputMunicipio.value;
-
-        const params = new URLSearchParams();
-        if (inicio) params.append("inicio", inicio);
-        if (fim) params.append("fim", fim);
-        if (municipio) params.append("municipio", municipio);
-
-        try {
-            const response = await fetch(`/api/map_image/mcirc?${params.toString()}`);
-            const data = await response.json();
-            if (data.image_url) mapImg.src = data.image_url;
-        } catch (err) {
-            console.error("Erro ao carregar mapa:", err);
-        }
-    }
-
-    // ===========================
     // Aplicar filtros
-    // ===========================
     async function aplicarFiltros() {
         const municipioValido = municipios.find(
             m => m.toLowerCase() === inputMunicipio.value.toLowerCase()
@@ -159,7 +131,6 @@ document.addEventListener("DOMContentLoaded", async () => {
 
         if (municipioValido || inputMunicipio.value === "") {
             await gerarGraficos();
-            await loadMapImage();
         } else {
             alert("Município inválido. Selecione um da lista.");
         }
@@ -167,9 +138,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     document.getElementById("btn-aplicar").addEventListener("click", aplicarFiltros);
 
-    // ===========================
-    // Exportar dashboard como PDF
-    // ===========================
+    // Exportar PDF
     document.getElementById("btn-export-pdf").addEventListener("click", async () => {
         const { jsPDF } = window.jspdf;
         const pdf = new jsPDF("landscape", "px", "a4");

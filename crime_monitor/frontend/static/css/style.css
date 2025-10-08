@@ -713,3 +713,8 @@ input:disabled {
     cursor: not-allowed;
     border-color: #ccc; /* borda levemente acinzentada */
 }
+
+#importancia-chart {
+    width: 100%;
+    height: 270px;
+}
