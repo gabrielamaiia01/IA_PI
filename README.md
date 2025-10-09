@@ -110,7 +110,7 @@ IA_PI/
 
 - **HTML / CSS / JavaScript**
 
-🧑‍💻 Equipe
+### 🧑‍💻 Equipe
 
 - @gabrielamaiia01
 - @HenriqueSilvaXavier
