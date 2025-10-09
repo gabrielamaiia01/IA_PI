@@ -345,7 +345,7 @@ def dashboard_data():
     variacao_latrocinio_anual_pct = ((latrocinios - soma_ano_ant) / soma_ano_ant) * 100 if soma_ano_ant > 0 else None
 
     # === Mortes por intervenção policial e tendência ===
-    mortes_intervencao_policial = df_grouped["hom_por_interv_policial"].mean().round(2)
+    mortes_intervencao_policial = df["hom_por_interv_policial"].mean()
 
     # Calcular mês anterior ao início do período filtrado
     if inicio:
@@ -369,7 +369,7 @@ def dashboard_data():
 
         df_prev_mes = df_trend_base[(df_trend_base["ano"] == ano_prev) & (df_trend_base["mes"] == mes_prev)]
 
-        if df_prev_mes.empty or df_prev_mes["hom_por_interv_policial"].sum() == 0:
+        if df_prev_mes.empty:
             tendencia_interv = "Indefinida"
         else:
             media_prev = df_prev_mes["hom_por_interv_policial"].mean()
@@ -408,7 +408,7 @@ def dashboard_data():
         "homicidios_dolosos_pct": homicidios_dolosos_pct,
         "latrocinios": latrocinios,
         "variacao_latrocinio_anual_pct": variacao_latrocinio_anual_pct,
-        "mortes_intervencao_policial": round(mortes_intervencao_policial),
+        "mortes_intervencao_policial": round(float(mortes_intervencao_policial or 0), 2),
         "tendencia_mortes_intervencao_policial": tendencia_interv,
         "evolucao_temporal": evolucao_temporal,
         "correlacao_crimes": correlacao_dict,
