@@ -1,2 +1,1 @@
-crime_monitor/backend/.env
-crime_monitor/backend/.gitignore
+.env
