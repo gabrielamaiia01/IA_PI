@@ -32,14 +32,15 @@ app = Flask(
 # ===========================
 # Paths e configurações
 # ===========================
-DATA_PATH = 'backend/data/BaseDPEvolucaoMensalCisp.csv'
-MODEL_PATH = 'models/model.pkl'
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DATA_PATH = os.path.join(BASE_DIR, 'data', 'BaseDPEvolucaoMensalCisp.csv')
+MODEL_PATH = os.path.join(BASE_DIR, 'models', 'model.pkl')
 
 SHAPEFILES = {
-    "mcirc": "backend/data/RJ_Municipios_2024.shp",
-    "cisp": "backend/data/lm_cisp_bd.shp",
-    "aisp": "backend/data/lm_aisp_072024.shp",
-    "risp": "backend/data/Limite_RISP_WGS.shp"
+    "mcirc": os.path.join(BASE_DIR, 'data', 'RJ_Municipios_2024.shp'),
+    "cisp": os.path.join(BASE_DIR, 'data', 'lm_cisp_bd.shp'),
+    "aisp": os.path.join(BASE_DIR, 'data', 'lm_aisp_072024.shp'),
+    "risp": os.path.join(BASE_DIR, 'data', 'Limite_RISP_WGS.shp')
 }
 
 MAP_FOLDER = os.path.join(app.static_folder, "img")
@@ -64,8 +65,7 @@ feature_names = [
 ]
 
 try:
-    model_path = os.path.join(os.path.dirname(__file__), MODEL_PATH)
-    with open(model_path, 'rb') as f:
+    with open(MODEL_PATH, 'rb') as f:
         model = pickle.load(f)
     print(f"✓ Modelo carregado com sucesso! ({type(model).__name__})")
 except Exception as e:
@@ -75,19 +75,22 @@ except Exception as e:
 # Função para carregar dados
 # ===========================
 def load_data():
+    # usa caminho absoluto para evitar problemas de working directory
+    if not os.path.exists(DATA_PATH):
+        raise FileNotFoundError(f"Arquivo de dados não encontrado: {DATA_PATH}")
     df = pd.read_csv(DATA_PATH, sep=";", encoding="latin1")
     return df
+
 
 def get_media_mes_proximo(df, mes, ano, coluna='letalidade_violenta'):
     """
     Retorna a média do mês mais próximo anterior que tenha algum dado na coluna especificada,
     buscando retroativamente por anos anteriores se necessário.
     """
-    mes_atual = mes
-    ano_atual = ano
+    mes_atual = int(mes)
+    ano_atual = int(ano)
 
     for _ in range(120):  # Limite de 10 anos para evitar loop infinito
-        # Passa para o mês anterior
         mes_atual -= 1
         if mes_atual == 0:
             mes_atual = 12
@@ -97,10 +100,10 @@ def get_media_mes_proximo(df, mes, ano, coluna='letalidade_violenta'):
         if not df_filtrado.empty and coluna in df_filtrado.columns:
             media = df_filtrado[coluna].mean()
             if pd.notna(media):
-                print(f"Mês encontrado: {mes_atual}/{ano_atual}, média: {media}")
-                return round(media)
+                return float(media)
 
     return None  # Nenhum dado encontrado nos últimos 10 anos
+
 
 def gerar_drivers_principais(df, features_dict, importance_dict):
     """
@@ -138,6 +141,7 @@ def gerar_drivers_principais(df, features_dict, importance_dict):
 
     return ", ".join(drivers)
 
+
 def classificar_tendencia(pred, media_mes_proximo):
     if media_mes_proximo is None or media_mes_proximo == 0:
         return "Sem dados suficientes"
@@ -155,6 +159,7 @@ def classificar_tendencia(pred, media_mes_proximo):
     else:
         return "Aumento significativo"
 
+
 def classificar_risco(pred, df):
     vals = df['letalidade_violenta'][df['letalidade_violenta'] > 0]
     if vals.empty:
@@ -170,7 +175,13 @@ def classificar_risco(pred, df):
     else:
         return "Alto"
 
+
 def salvar_previsao_banco(features_dict, prediction_value):
+    # se as variáveis de conexão não estiverem setadas, sai sem erro
+    if not all([DB_NAME, DB_USER, DB_PASSWORD, DB_HOST, DB_PORT]):
+        print("Parâmetros do DB ausentes — pulando salvamento no banco.")
+        return
+
     try:
         conn = psycopg2.connect(
             dbname=DB_NAME,
@@ -236,18 +247,22 @@ def dashboard_data():
     fim = request.args.get("fim")
     municipio = request.args.get("municipio")
 
-    # preparar datas
+    # Preparar datas
     df["data"] = pd.to_datetime(df["ano"].astype(str) + "-" + df["mes"].astype(str) + "-01")
-    if inicio:
-        df = df[df["data"] >= pd.to_datetime(inicio)]
-    if fim:
-        df = df[df["data"] <= pd.to_datetime(fim)]
+
+    # Filtrar município logo no início
     if municipio:
         gdf_mun = gpd.read_file(SHAPEFILES["mcirc"])[["CD_MUN", "NM_MUN"]]
         gdf_mun["CD_MUN"] = gdf_mun["CD_MUN"].astype(str)
         df["mcirc"] = df["mcirc"].astype(str)
         df = df.merge(gdf_mun, left_on="mcirc", right_on="CD_MUN", how="left")
         df = df[df["NM_MUN"] == municipio]
+
+    # Aplicar filtros de datas
+    if inicio:
+        df = df[df["data"] >= pd.to_datetime(inicio)]
+    if fim:
+        df = df[df["data"] <= pd.to_datetime(fim)]
 
     if df.empty:
         return jsonify({
@@ -263,13 +278,12 @@ def dashboard_data():
             "scatter_data": []
         })
 
-    # agrupamento mensal
+    # Agrupamento mensal
     df_grouped = df.groupby(["ano", "mes"]).agg({
         "letalidade_violenta": "sum",
         "hom_doloso": "sum",
         "latrocinio": "sum",
         "hom_por_interv_policial": "sum",
-        # outras colunas...
         "tentat_hom": "sum",
         "lesao_corp_culposa": "sum",
         "estupro": "sum",
@@ -283,87 +297,90 @@ def dashboard_data():
         "roubo_rua": "sum"
     }).reset_index().sort_values(["ano", "mes"]).reset_index(drop=True)
 
-    # KPI: letalidade total (soma do período)
+    # KPIs principais
     letalidade_total = int(df_grouped["letalidade_violenta"].sum())
-
-    # KPI: homicídios dolosos = último mês
     latest = df_grouped.iloc[-1]
     homicidios_dolosos = int(latest["hom_doloso"])
 
-    # homicidios_dolosos_pct = variação entre último mês e mês anterior (usando média)
     homicidios_dolosos_pct = None
     if len(df_grouped) > 1:
-        ano_prev, mes_prev = latest["ano"], latest["mes"] - 1
+        ano_prev = int(latest["ano"])
+        mes_prev = int(latest["mes"]) - 1
         if mes_prev == 0:
             ano_prev -= 1
             mes_prev = 12
-
         df_prev_mes = df_grouped[(df_grouped["ano"] == ano_prev) & (df_grouped["mes"] == mes_prev)]
         if not df_prev_mes.empty:
             media_prev = df_prev_mes["hom_doloso"].mean()
             if media_prev > 0:
                 homicidios_dolosos_pct = ((latest["hom_doloso"] - media_prev) / media_prev) * 100
 
-
-    # KPI: latrocínios = soma no período filtrado
-    # Encontrar o mês anterior no dataset completo
+    # Latrocínios comparativos
+    latrocinios = int(df_grouped["latrocinio"].sum())
     df_full = load_data()
     df_full["data"] = pd.to_datetime(df_full["ano"].astype(str) + "-" + df_full["mes"].astype(str) + "-01")
-    latrocinios = int(df_grouped["latrocinio"].sum())
-    soma_ano_ant = 0
 
+    # Aplicar mesmo filtro de município no df_full
+    if municipio:
+        gdf_mun = gpd.read_file(SHAPEFILES["mcirc"])[["CD_MUN", "NM_MUN"]]
+        gdf_mun["CD_MUN"] = gdf_mun["CD_MUN"].astype(str)
+        df_full["mcirc"] = df_full["mcirc"].astype(str)
+        df_full = df_full.merge(gdf_mun, left_on="mcirc", right_on="CD_MUN", how="left")
+        df_full = df_full[df_full["NM_MUN"] == municipio]
+
+    if inicio:
+        df_full = df_full[df_full["data"] >= pd.to_datetime(inicio)]
+    if fim:
+        df_full = df_full[df_full["data"] <= pd.to_datetime(fim)]
+
+    soma_ano_ant = 0
     for _, row in df_grouped.iterrows():
-        ano_ant = row["ano"] - 1
-        mes = row["mes"]
-        # usar df_full para pegar o ano anterior
+        ano_ant = int(row["ano"]) - 1
+        mes = int(row["mes"])
         df_mes_ant = df_full[(df_full["ano"] == ano_ant) & (df_full["mes"] == mes)]
         if not df_mes_ant.empty:
-            soma_ano_ant += df_mes_ant["latrocinio"].sum()  # somar todos os registros desse mês/ano
+            soma_ano_ant += df_mes_ant["latrocinio"].sum()
+    variacao_latrocinio_anual_pct = ((latrocinios - soma_ano_ant) / soma_ano_ant) * 100 if soma_ano_ant > 0 else None
 
-    if soma_ano_ant > 0:
-        variacao_latrocinio_anual_pct = ((latrocinios - soma_ano_ant) / soma_ano_ant) * 100
-    else:
-        variacao_latrocinio_anual_pct = None
-    # KPI: mortes por intervenção policial (média do período filtrado)
-    mortes_intervencao_policial = round(df_grouped["hom_por_interv_policial"].mean())
+    # Mortes por intervenção policial e tendência
+    # Usar o valor mais recente e compará-lo ao mês imediatamente anterior (se existir no agrupado)
+    mortes_intervencao_policial = int(latest["hom_por_interv_policial"])
 
-    ano_inicio = df_grouped["ano"].iloc[0]
-    mes_inicio = df_grouped["mes"].iloc[0]
+    ano_latest = int(latest["ano"])
+    mes_latest = int(latest["mes"])
+    mes_prev = mes_latest - 1
+    ano_prev = ano_latest
+    if mes_prev == 0:
+        mes_prev = 12
+        ano_prev -= 1
 
-    # Determina ano e mês anterior
-    if mes_inicio == 1:
-        ano_anterior = ano_inicio - 1
-        mes_anterior = 12
-    else:
-        ano_anterior = ano_inicio
-        mes_anterior = mes_inicio - 1
-
-    # Pega média do mês anterior considerando todo o dataset
-    df_mes_anterior = df_full[(df_full["ano"] == ano_anterior) & (df_full["mes"] == mes_anterior)]
-    media_mes_anterior = df_mes_anterior["hom_por_interv_policial"].mean() if not df_mes_anterior.empty else None
-
-    # Define tendência comparando médias
-    if media_mes_anterior is not None:
-        if mortes_intervencao_policial > media_mes_anterior * 1.05:
-            tendencia_interv = "crescente"
-        elif mortes_intervencao_policial < media_mes_anterior * 0.95:
-            tendencia_interv = "decrescente"
+    df_prev = df_grouped[(df_grouped["ano"] == ano_prev) & (df_grouped["mes"] == mes_prev)]
+    if not df_prev.empty:
+        valor_prev = int(df_prev.iloc[0]["hom_por_interv_policial"])
+        if valor_prev == 0:
+            tendencia_interv = "Indefinida"
         else:
-            tendencia_interv = "estável"
+            ratio = mortes_intervencao_policial / valor_prev
+            if ratio > 1.05:
+                tendencia_interv = "crescente"
+            elif ratio < 0.95:
+                tendencia_interv = "decrescente"
+            else:
+                tendencia_interv = "estável"
     else:
         tendencia_interv = "Indefinida"
 
-    # evolução temporal e correlação (mantém igual sua implementação)
+    # Evolução temporal e correlação
     df_grouped["Periodo"] = df_grouped["ano"].astype(str) + "-" + df_grouped["mes"].astype(str).str.zfill(2)
     evolucao_temporal = df_grouped[["Periodo", "letalidade_violenta"]].rename(
         columns={"Periodo": "x", "letalidade_violenta": "y"}
     ).to_dict(orient="records")
 
-    col_corr = [ "tentat_hom", "lesao_corp_culposa", "estupro", "estelionato",
-                 "apreensao_drogas","trafico_drogas","apf","pessoas_desaparecidas",
-                 "encontro_cadaver","registro_ocorrencias" ]
+    col_corr = ["tentat_hom", "lesao_corp_culposa", "estupro", "estelionato",
+                "apreensao_drogas", "trafico_drogas", "apf", "pessoas_desaparecidas",
+                "encontro_cadaver", "registro_ocorrencias"]
     correlacao_dict = df_grouped[["letalidade_violenta"] + col_corr].corr()["letalidade_violenta"] \
-                        .drop("letalidade_violenta").to_dict()
+        .drop("letalidade_violenta").to_dict()
 
     scatter_data = []
     if "roubo_rua" in df.columns:
@@ -382,6 +399,7 @@ def dashboard_data():
         "correlacao_crimes": correlacao_dict,
         "scatter_data": scatter_data
     })
+
 
 @app.route('/api/medias')
 def api_medias():
@@ -476,7 +494,7 @@ def previsao_api():
 
     # === Preparar dados para previsão ===
     X = pd.DataFrame([data['features']], columns=feature_names)
-    pred = round(model.predict(X)[0])
+    pred = int(round(model.predict(X)[0]))
 
     # === Histórico real (soma por mês) ===
     df_hist = df.groupby(['ano', 'mes'])['letalidade_violenta'].sum().reset_index()
@@ -485,7 +503,6 @@ def previsao_api():
     preds_boot = []
     for _ in range(1000):
         sample = df_hist['letalidade_violenta'].sample(len(df_hist), replace=True)
-        # Simula pequenas variações na previsão
         preds_boot.append(pred + (sample.mean() - df_hist['letalidade_violenta'].mean()))
     lower = max(np.percentile(preds_boot, 2.5), 0)
     upper = np.percentile(preds_boot, 97.5)
@@ -495,24 +512,28 @@ def previsao_api():
     media_historica_valores = df_hist_media['letalidade_violenta'].tolist()
 
     # === Buscar previsões e médias no banco de dados em uma única conexão ===
-    import psycopg2
-    conn = psycopg2.connect(
-        dbname=DB_NAME,
-        user=DB_USER,
-        password=DB_PASSWORD,
-        host=DB_HOST,
-        port=DB_PORT
-    )
-    cursor = conn.cursor()
-    cursor.execute("""
-        SELECT ano, mes, SUM(letalidade_violenta), AVG(letalidade_violenta)
-        FROM crimes_RJ.dados_previstos
-        GROUP BY ano, mes
-        ORDER BY ano, mes
-    """)
-    prev_data = cursor.fetchall()
-    cursor.close()
-    conn.close()
+    prev_data = []
+    if all([DB_NAME, DB_USER, DB_PASSWORD, DB_HOST, DB_PORT]):
+        try:
+            conn = psycopg2.connect(
+                dbname=DB_NAME,
+                user=DB_USER,
+                password=DB_PASSWORD,
+                host=DB_HOST,
+                port=DB_PORT
+            )
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT ano, mes, SUM(letalidade_violenta), AVG(letalidade_violenta)
+                FROM crimes_RJ.dados_previstos
+                GROUP BY ano, mes
+                ORDER BY ano, mes
+            """)
+            prev_data = cursor.fetchall()
+            cursor.close()
+            conn.close()
+        except Exception as e:
+            print("Erro ao buscar previsões no banco:", e)
 
     prev_labels = [f"{row[0]}-{row[1]:02d}" for row in prev_data]
     prev_valores = [row[2] for row in prev_data]
@@ -525,15 +546,24 @@ def previsao_api():
     tendencia = classificar_tendencia(pred, media_mes_proximo)
     risco = classificar_risco(pred, df)
 
-    # === Importância das features ===
-    importance = model.booster_.feature_importance(importance_type='gain')
+    # === Importância das features (robusto a vários tipos de modelo) ===
+    try:
+        importance = list(model.feature_importances_)
+    except Exception:
+        try:
+            importance = list(model.booster_.feature_importance(importance_type='gain'))
+        except Exception:
+            importance = [0] * len(feature_names)
     importance_dict = dict(zip(feature_names, importance))
 
     # === Drivers principais ===
     drivers = gerar_drivers_principais(df, dict(zip(feature_names, data['features'])), importance_dict)
 
     # === Salvar previsão no banco ===
-    salvar_previsao_banco(dict(zip(feature_names, data['features'])), pred)
+    try:
+        salvar_previsao_banco(dict(zip(feature_names, data['features'])), pred)
+    except Exception as e:
+        print("Erro ao salvar previsão (não fatal):", e)
 
     # === Dados históricos para gráfico ===
     historico_labels = df_hist.apply(lambda row: f"{int(row['ano'])}-{int(row['mes']):02d}", axis=1).tolist()
@@ -667,4 +697,4 @@ def agrupamentos_data():
 # Main
 # ===========================
 if __name__ == "__main__":
-    app.run(host="127.0.0.1", port=5000, debug=True)
+    app.run(host="0.0.0.0", port=5000, debug=True)
