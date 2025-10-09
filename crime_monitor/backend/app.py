@@ -426,7 +426,7 @@ def dashboard_data():
         elif isinstance(obj, (float, np.floating)) and (np.isnan(obj) or np.isinf(obj)):
             return None
         return obj
-        
+
     if not inicio and not fim:
         homicidios_dolosos_pct = None
         variacao_latrocinio_anual_pct = None
@@ -740,4 +740,4 @@ def agrupamentos_data():
 # Main
 # ===========================
 if __name__ == "__main__":
-    app.run(host="192.168.1.10", port=5000, debug=True)
+    app.run(host="127.0.0.1", port=5000, debug=True)
