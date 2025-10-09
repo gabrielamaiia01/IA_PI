@@ -1,6 +1,6 @@
-# 🧠 IA\_PI — Sistema de Previsão de Letalidade Violenta
+# 🧠 IA_PI — Sistema de Previsão de Letalidade Violenta
 
-Este projeto tem como objetivo realizar análises e previsões de letalidade violenta no estado do Rio de Janeiro, utilizando \*\*Python\*\*, \*\*Flask\*\*, e \*\*PostgreSQL\*\*.
+Este projeto tem como objetivo realizar análises e previsões de letalidade violenta no estado do Rio de Janeiro, utilizando **Python**, **Flask**, e **PostgreSQL**.
 
 ---
 
@@ -72,38 +72,52 @@ Abra o endereço abaixo para visualizar o sistema:
 
 http://127.0.0.1:5000
 
-🧩 Estrutura do projeto
+### 🧩 Estrutura do projeto
 
-bash
-
-Copy code
-
-IA\_PI/
+```bash
+IA_PI/
 │
-├── crime\_monitor/
+├── crime_monitor/
 │ ├── backend/
 │ │ ├── app.py # Aplicação Flask
 │ │ ├── db.py # Conexão com o banco
-│ │ └── crime\_bd.sql # Script de criação do banco
+│ │ └── crime_bd.sql # Script de criação do banco
 │ └── frontend/ # Interface web
+│ │ └── pages/ 
+│ │ │ ├── agrupamento.html 
+│ │ │ ├── index.html 
+│ │ │ └── previsao.html 
+│ │ └── static/ 
+│ │ │ └── css/ 
+│ │ │ │ └── style.css
+│ │ │ └── img/ 
+│ │ │ └── js/ 
+│ │ │ │ ├── agrupamento.js
+│ │ │ │ ├── index.js
+│ │ │ │ └── previsao.js
+│ │ │ └── maps/ 
 │
 └── README.md
+```
+### 🛠️ Tecnologias utilizadas
+- **Python 3**
 
-🛠️ Tecnologias utilizadas
-*Python 3*
-*Flask*
-*PostgreSQL*
-*Pandas / NumPy / Scikit-Learn*
-*HTML / CSS / JavaScript*
+- **Flask**
+
+- **PostgreSQL**
+
+- **Pandas / NumPy / Scikit-Learn**
+
+- **HTML / CSS / JavaScript**
 
 🧑‍💻 Equipe
 
-@gabrielamaiia01
-@HenriqueSilvaXavier
-@rafaelts007
-@FlaviaPaloma
-@YLASP
-@Elias969 
+-@gabrielamaiia01
+-@HenriqueSilvaXavier
+-@rafaelts007
+-@FlaviaPaloma
+-@YLASP
+-@Elias969 
 
 ### ⚙️ Observações
 
