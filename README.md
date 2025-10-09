@@ -112,12 +112,12 @@ IA_PI/
 
 🧑‍💻 Equipe
 
--@gabrielamaiia01
--@HenriqueSilvaXavier
--@rafaelts007
--@FlaviaPaloma
--@YLASP
--@Elias969 
+- @gabrielamaiia01
+- @HenriqueSilvaXavier
+- @rafaelts007
+- @FlaviaPaloma
+- @YLASP
+- @Elias969 
 
 ### ⚙️ Observações
 
