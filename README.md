@@ -26,19 +26,13 @@ cd IA\_PI
 code .
 ```
 
-4\. Mude para a branch correta
-
-```bash
-git checkout henrique2
-```
-
-### 5. Acesse a pasta do sistema
+### 4. Acesse a pasta do sistema
 
 ```bash
 cd crime_monitor
 ```
 
-### 6. Crie o banco de dados
+### 5. Crie o banco de dados
 
 Execute o script SQL no PostgreSQL.
 
@@ -54,7 +48,7 @@ psql -U \-h \-p <5432> -W -f
 psql -U postgres -h localhost -p 5432 -W -f backend/crime\_bd.sql
 ```
 
-### 7. Crie o arquivo .env
+### 6. Crie o arquivo .env
 
 Antes de rodar o sistema, crie um arquivo chamado .env dentro da pasta backend/ com as seguintes variáveis de ambiente:
 ```bash
@@ -67,20 +61,20 @@ DB_PORT=5432
 
 Essas variáveis serão usadas para configurar a conexão com o banco de dados PostgreSQL.
 
-### 8. Execute o script de conexão com o banco
+### 7. Execute o script de conexão com o banco
 
 ```bash
 python backend/db.py
 ```
 
-### 9. Inicie o servidor Flask
+### 8. Inicie o servidor Flask
 
 ```bash
 
 python backend/app.py
 ```
 
-### 10. Acesse no navegador
+### 9. Acesse no navegador
 
 Abra o endereço abaixo para visualizar o sistema:
 
