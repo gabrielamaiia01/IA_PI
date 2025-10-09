@@ -305,24 +305,43 @@ def dashboard_data():
 
     # Variação percentual de homicídios dolosos em relação ao mês anterior
     homicidios_dolosos_pct = None
-    if len(df_grouped) > 1:
-        ano_prev = int(latest["ano"])
-        mes_prev = int(latest["mes"]) - 1
-        if mes_prev == 0:
-            ano_prev -= 1
-            mes_prev = 12
-        df_prev_mes = df_grouped[(df_grouped["ano"] == ano_prev) & (df_grouped["mes"] == mes_prev)]
-        if not df_prev_mes.empty:
-            media_prev = df_prev_mes["hom_doloso"].mean()
-            if media_prev > 0:
-                homicidios_dolosos_pct = ((latest["hom_doloso"] - media_prev) / media_prev) * 100
+    df_full_hom = load_data()
+    df_full_hom["data"] = pd.to_datetime(df_full_hom["ano"].astype(str) + "-" + df_full_hom["mes"].astype(str) + "-01")
+
+    # Aplicar filtro de município (mas não de data!)
+    if municipio:
+        gdf_mun = gpd.read_file(SHAPEFILES["mcirc"])[["CD_MUN", "NM_MUN"]]
+        gdf_mun["CD_MUN"] = gdf_mun["CD_MUN"].astype(str)
+        df_full_hom["mcirc"] = df_full_hom["mcirc"].astype(str)
+        df_full_hom = df_full_hom.merge(gdf_mun, left_on="mcirc", right_on="CD_MUN", how="left")
+        df_full_hom = df_full_hom[df_full_hom["NM_MUN"] == municipio]
+
+    # Pegar mês e ano do último registro (do período filtrado)
+    ano_atual = int(latest["ano"])
+    mes_atual = int(latest["mes"])
+
+    # Determinar mês e ano anterior
+    mes_prev = mes_atual - 1
+    ano_prev = ano_atual
+    if mes_prev == 0:
+        mes_prev = 12
+        ano_prev -= 1
+
+    # Buscar no dataset completo
+    df_mes_prev = df_full_hom[(df_full_hom["ano"] == ano_prev) & (df_full_hom["mes"] == mes_prev)]
+
+    if not df_mes_prev.empty:
+        soma_atual = latest["hom_doloso"]
+        soma_prev = df_mes_prev["hom_doloso"].sum()
+        if soma_prev > 0:
+            homicidios_dolosos_pct = ((soma_atual - soma_prev) / soma_prev) * 100
 
     # Latrocínios comparativos (com ano anterior)
     latrocinios = int(df_grouped["latrocinio"].sum())
     df_full = load_data()
     df_full["data"] = pd.to_datetime(df_full["ano"].astype(str) + "-" + df_full["mes"].astype(str) + "-01")
 
-    # Aplicar mesmos filtros no df_full
+    # Aplicar filtro de município (mas não de data!)
     if municipio:
         gdf_mun = gpd.read_file(SHAPEFILES["mcirc"])[["CD_MUN", "NM_MUN"]]
         gdf_mun["CD_MUN"] = gdf_mun["CD_MUN"].astype(str)
@@ -330,11 +349,7 @@ def dashboard_data():
         df_full = df_full.merge(gdf_mun, left_on="mcirc", right_on="CD_MUN", how="left")
         df_full = df_full[df_full["NM_MUN"] == municipio]
 
-    if inicio:
-        df_full = df_full[df_full["data"] >= pd.to_datetime(inicio)]
-    if fim:
-        df_full = df_full[df_full["data"] <= pd.to_datetime(fim)]
-
+    # Agora sim, comparar com o mesmo mês do ano anterior
     soma_ano_ant = 0
     for _, row in df_grouped.iterrows():
         ano_ant = int(row["ano"]) - 1
@@ -342,6 +357,7 @@ def dashboard_data():
         df_mes_ant = df_full[(df_full["ano"] == ano_ant) & (df_full["mes"] == mes)]
         if not df_mes_ant.empty:
             soma_ano_ant += df_mes_ant["latrocinio"].sum()
+
     variacao_latrocinio_anual_pct = ((latrocinios - soma_ano_ant) / soma_ano_ant) * 100 if soma_ano_ant > 0 else None
 
     # === Mortes por intervenção policial e tendência ===
@@ -373,7 +389,7 @@ def dashboard_data():
             tendencia_interv = "Indefinida"
         else:
             media_prev = df_prev_mes["hom_por_interv_policial"].mean()
-            ratio = df_grouped.iloc[-1]["hom_por_interv_policial"] / media_prev
+            ratio = mortes_intervencao_policial / media_prev
             if ratio > 1.05:
                 tendencia_interv = "crescente"
             elif ratio < 0.95:
@@ -402,7 +418,20 @@ def dashboard_data():
         scatter_data = df[["roubo_rua", "letalidade_violenta"]].dropna().to_dict(orient="records")
         scatter_data = [{"x": r["roubo_rua"], "y": r["letalidade_violenta"]} for r in scatter_data]
 
-    return jsonify({
+    def replace_invalid(obj):
+        if isinstance(obj, dict):
+            return {k: replace_invalid(v) for k, v in obj.items()}
+        elif isinstance(obj, list):
+            return [replace_invalid(v) for v in obj]
+        elif isinstance(obj, (float, np.floating)) and (np.isnan(obj) or np.isinf(obj)):
+            return None
+        return obj
+        
+    if not inicio and not fim:
+        homicidios_dolosos_pct = None
+        variacao_latrocinio_anual_pct = None
+
+    return jsonify(replace_invalid({
         "letalidade_violenta_total": letalidade_total,
         "homicidios_dolosos": homicidios_dolosos,
         "homicidios_dolosos_pct": homicidios_dolosos_pct,
@@ -413,7 +442,7 @@ def dashboard_data():
         "evolucao_temporal": evolucao_temporal,
         "correlacao_crimes": correlacao_dict,
         "scatter_data": scatter_data
-    })
+    }))
 
 @app.route('/api/medias')
 def api_medias():
@@ -711,4 +740,4 @@ def agrupamentos_data():
 # Main
 # ===========================
 if __name__ == "__main__":
-    app.run(host="127.0.0.1", port=5000, debug=True)
+    app.run(host="192.168.1.10", port=5000, debug=True)
