@@ -1,12 +1,14 @@
-CREATE SCHEMA IF NOT EXISTS crimes_RJ;
-CREATE TABLE IF NOT EXISTS crimes_RJ.dados_previstos
+CREATE DATABASE crimes;
+
+\c crimes
+
+CREATE TABLE IF NOT EXISTS dados_previstos
 (
     prev_id bigserial NOT NULL,
     cisp smallint NOT NULL,
     mcirc bigint NOT NULL,
     mes smallint NOT NULL,
     ano integer NOT NULL,
-    letalidade_violenta integer,
     tentat_hom integer,
     estupro integer,
     lesao_corp_culposa integer,
@@ -21,14 +23,13 @@ CREATE TABLE IF NOT EXISTS crimes_RJ.dados_previstos
     CONSTRAINT dados_previstos_pkey PRIMARY KEY (prev_id)
 );
 
-CREATE TABLE IF NOT EXISTS crimes_RJ.dados_reais
+CREATE TABLE IF NOT EXISTS dados_reais
 (
     real_id bigserial NOT NULL,
     cisp smallint NOT NULL,
     mcirc bigint NOT NULL,
     mes smallint NOT NULL,
     ano integer NOT NULL,
-    letalidade_violenta integer,
     tentat_hom integer,
     estupro integer,
     lesao_corp_culposa integer,
@@ -42,4 +43,3 @@ CREATE TABLE IF NOT EXISTS crimes_RJ.dados_reais
     registro_ocorrencias integer,
     CONSTRAINT dados_reais_pkey PRIMARY KEY (real_id)
 );
-END;
