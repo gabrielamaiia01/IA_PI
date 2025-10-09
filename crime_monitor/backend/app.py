@@ -408,7 +408,7 @@ def dashboard_data():
         "homicidios_dolosos_pct": homicidios_dolosos_pct,
         "latrocinios": latrocinios,
         "variacao_latrocinio_anual_pct": variacao_latrocinio_anual_pct,
-        "mortes_intervencao_policial": round(float(mortes_intervencao_policial or 0), 2),
+        "mortes_intervencao_policial": round(mortes_intervencao_policial or 0, 2),
         "tendencia_mortes_intervencao_policial": tendencia_interv,
         "evolucao_temporal": evolucao_temporal,
         "correlacao_crimes": correlacao_dict,
