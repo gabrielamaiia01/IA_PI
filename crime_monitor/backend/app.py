@@ -427,10 +427,10 @@ def dashboard_data():
             return None
         return obj
 
-    if not inicio and not fim:
+    if not inicio or pd.to_datetime(inicio) < pd.Timestamp("2003-01-01"):
         homicidios_dolosos_pct = None
         variacao_latrocinio_anual_pct = None
-
+        
     return jsonify(replace_invalid({
         "letalidade_violenta_total": letalidade_total,
         "homicidios_dolosos": homicidios_dolosos,
