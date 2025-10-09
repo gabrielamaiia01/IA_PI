@@ -250,7 +250,7 @@ def dashboard_data():
     # Preparar datas
     df["data"] = pd.to_datetime(df["ano"].astype(str) + "-" + df["mes"].astype(str) + "-01")
 
-    # Filtrar município logo no início
+    # Filtrar por município
     if municipio:
         gdf_mun = gpd.read_file(SHAPEFILES["mcirc"])[["CD_MUN", "NM_MUN"]]
         gdf_mun["CD_MUN"] = gdf_mun["CD_MUN"].astype(str)
@@ -258,12 +258,13 @@ def dashboard_data():
         df = df.merge(gdf_mun, left_on="mcirc", right_on="CD_MUN", how="left")
         df = df[df["NM_MUN"] == municipio]
 
-    # Aplicar filtros de datas
+    # Aplicar filtros de data
     if inicio:
         df = df[df["data"] >= pd.to_datetime(inicio)]
     if fim:
         df = df[df["data"] <= pd.to_datetime(fim)]
 
+    # Caso não haja dados após os filtros
     if df.empty:
         return jsonify({
             "letalidade_violenta_total": 0,
@@ -302,6 +303,7 @@ def dashboard_data():
     latest = df_grouped.iloc[-1]
     homicidios_dolosos = int(latest["hom_doloso"])
 
+    # Variação percentual de homicídios dolosos em relação ao mês anterior
     homicidios_dolosos_pct = None
     if len(df_grouped) > 1:
         ano_prev = int(latest["ano"])
@@ -315,12 +317,12 @@ def dashboard_data():
             if media_prev > 0:
                 homicidios_dolosos_pct = ((latest["hom_doloso"] - media_prev) / media_prev) * 100
 
-    # Latrocínios comparativos
+    # Latrocínios comparativos (com ano anterior)
     latrocinios = int(df_grouped["latrocinio"].sum())
     df_full = load_data()
     df_full["data"] = pd.to_datetime(df_full["ano"].astype(str) + "-" + df_full["mes"].astype(str) + "-01")
 
-    # Aplicar mesmo filtro de município no df_full
+    # Aplicar mesmos filtros no df_full
     if municipio:
         gdf_mun = gpd.read_file(SHAPEFILES["mcirc"])[["CD_MUN", "NM_MUN"]]
         gdf_mun["CD_MUN"] = gdf_mun["CD_MUN"].astype(str)
@@ -342,25 +344,36 @@ def dashboard_data():
             soma_ano_ant += df_mes_ant["latrocinio"].sum()
     variacao_latrocinio_anual_pct = ((latrocinios - soma_ano_ant) / soma_ano_ant) * 100 if soma_ano_ant > 0 else None
 
-    # Mortes por intervenção policial e tendência
-    # Usar o valor mais recente e compará-lo ao mês imediatamente anterior (se existir no agrupado)
-    mortes_intervencao_policial = int(latest["hom_por_interv_policial"])
+    # === Mortes por intervenção policial e tendência ===
+    mortes_intervencao_policial = df_grouped["hom_por_interv_policial"].mean().round(2)
 
-    ano_latest = int(latest["ano"])
-    mes_latest = int(latest["mes"])
-    mes_prev = mes_latest - 1
-    ano_prev = ano_latest
-    if mes_prev == 0:
-        mes_prev = 12
-        ano_prev -= 1
+    # Calcular mês anterior ao início do período filtrado
+    if inicio:
+        inicio_dt = pd.to_datetime(inicio)
+        mes_prev = inicio_dt.month - 1
+        ano_prev = inicio_dt.year
+        if mes_prev == 0:
+            mes_prev = 12
+            ano_prev -= 1
 
-    df_prev = df_grouped[(df_grouped["ano"] == ano_prev) & (df_grouped["mes"] == mes_prev)]
-    if not df_prev.empty:
-        valor_prev = int(df_prev.iloc[0]["hom_por_interv_policial"])
-        if valor_prev == 0:
+        # Usar df completo, apenas com filtro de município
+        df_trend_base = load_data()
+        df_trend_base["data"] = pd.to_datetime(df_trend_base["ano"].astype(str) + "-" + df_trend_base["mes"].astype(str) + "-01")
+        
+        if municipio:
+            gdf_mun = gpd.read_file(SHAPEFILES["mcirc"])[["CD_MUN", "NM_MUN"]]
+            gdf_mun["CD_MUN"] = gdf_mun["CD_MUN"].astype(str)
+            df_trend_base["mcirc"] = df_trend_base["mcirc"].astype(str)
+            df_trend_base = df_trend_base.merge(gdf_mun, left_on="mcirc", right_on="CD_MUN", how="left")
+            df_trend_base = df_trend_base[df_trend_base["NM_MUN"] == municipio]
+
+        df_prev_mes = df_trend_base[(df_trend_base["ano"] == ano_prev) & (df_trend_base["mes"] == mes_prev)]
+
+        if df_prev_mes.empty or df_prev_mes["hom_por_interv_policial"].sum() == 0:
             tendencia_interv = "Indefinida"
         else:
-            ratio = mortes_intervencao_policial / valor_prev
+            media_prev = df_prev_mes["hom_por_interv_policial"].mean()
+            ratio = df_grouped.iloc[-1]["hom_por_interv_policial"] / media_prev
             if ratio > 1.05:
                 tendencia_interv = "crescente"
             elif ratio < 0.95:
@@ -370,18 +383,20 @@ def dashboard_data():
     else:
         tendencia_interv = "Indefinida"
 
-    # Evolução temporal e correlação
+    # Evolução temporal
     df_grouped["Periodo"] = df_grouped["ano"].astype(str) + "-" + df_grouped["mes"].astype(str).str.zfill(2)
     evolucao_temporal = df_grouped[["Periodo", "letalidade_violenta"]].rename(
         columns={"Periodo": "x", "letalidade_violenta": "y"}
     ).to_dict(orient="records")
 
+    # Correlação com outros crimes
     col_corr = ["tentat_hom", "lesao_corp_culposa", "estupro", "estelionato",
                 "apreensao_drogas", "trafico_drogas", "apf", "pessoas_desaparecidas",
                 "encontro_cadaver", "registro_ocorrencias"]
     correlacao_dict = df_grouped[["letalidade_violenta"] + col_corr].corr()["letalidade_violenta"] \
         .drop("letalidade_violenta").to_dict()
 
+    # Scatter
     scatter_data = []
     if "roubo_rua" in df.columns:
         scatter_data = df[["roubo_rua", "letalidade_violenta"]].dropna().to_dict(orient="records")
@@ -393,13 +408,12 @@ def dashboard_data():
         "homicidios_dolosos_pct": homicidios_dolosos_pct,
         "latrocinios": latrocinios,
         "variacao_latrocinio_anual_pct": variacao_latrocinio_anual_pct,
-        "mortes_intervencao_policial": mortes_intervencao_policial,
+        "mortes_intervencao_policial": round(mortes_intervencao_policial),
         "tendencia_mortes_intervencao_policial": tendencia_interv,
         "evolucao_temporal": evolucao_temporal,
         "correlacao_crimes": correlacao_dict,
         "scatter_data": scatter_data
     })
-
 
 @app.route('/api/medias')
 def api_medias():
@@ -697,4 +711,4 @@ def agrupamentos_data():
 # Main
 # ===========================
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    app.run(host="172.26.41.111", port=5000, debug=True)
