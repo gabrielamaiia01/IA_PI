@@ -300,48 +300,48 @@ def dashboard_data():
 
     # KPIs principais
     letalidade_total = int(df_grouped["letalidade_violenta"].sum())
-    latest = df_grouped.iloc[-1]
-    homicidios_dolosos = int(latest["hom_doloso"])
 
-    # Variação percentual de homicídios dolosos em relação ao mês anterior
+    # === Homicídios dolosos (média do período filtrado) ===
+    homicidios_dolosos = df["hom_doloso"].mean() if not df.empty else 0
+
+    # === Comparação com a média do mês anterior à data de início ===
     homicidios_dolosos_pct = None
-    df_full_hom = load_data()
-    df_full_hom["data"] = pd.to_datetime(df_full_hom["ano"].astype(str) + "-" + df_full_hom["mes"].astype(str) + "-01")
+    if inicio:
+        inicio_dt = pd.to_datetime(inicio)
+        mes_prev = inicio_dt.month - 1
+        ano_prev = inicio_dt.year
+        if mes_prev == 0:
+            mes_prev = 12
+            ano_prev -= 1
 
-    # Aplicar filtro de município (mas não de data!)
-    if municipio:
-        gdf_mun = gpd.read_file(SHAPEFILES["mcirc"])[["CD_MUN", "NM_MUN"]]
-        gdf_mun["CD_MUN"] = gdf_mun["CD_MUN"].astype(str)
-        df_full_hom["mcirc"] = df_full_hom["mcirc"].astype(str)
-        df_full_hom = df_full_hom.merge(gdf_mun, left_on="mcirc", right_on="CD_MUN", how="left")
-        df_full_hom = df_full_hom[df_full_hom["NM_MUN"] == municipio]
+        # Carrega dataset completo (sem filtro de data, com filtro de município se existir)
+        df_prev = load_data()
+        df_prev["data"] = pd.to_datetime(df_prev["ano"].astype(str) + "-" + df_prev["mes"].astype(str) + "-01")
 
-    # Pegar mês e ano do último registro (do período filtrado)
-    ano_atual = int(latest["ano"])
-    mes_atual = int(latest["mes"])
+        if municipio:
+            gdf_mun = gpd.read_file(SHAPEFILES["mcirc"])[["CD_MUN", "NM_MUN"]]
+            gdf_mun["CD_MUN"] = gdf_mun["CD_MUN"].astype(str)
+            df_prev["mcirc"] = df_prev["mcirc"].astype(str)
+            df_prev = df_prev.merge(gdf_mun, left_on="mcirc", right_on="CD_MUN", how="left")
+            df_prev = df_prev[df_prev["NM_MUN"] == municipio]
 
-    # Determinar mês e ano anterior
-    mes_prev = mes_atual - 1
-    ano_prev = ano_atual
-    if mes_prev == 0:
-        mes_prev = 12
-        ano_prev -= 1
+        # === Agrupar para garantir médias mensais ===
+        df_grouped_periodo = df.groupby(["ano", "mes"])["hom_doloso"].mean().reset_index()
+        homicidios_dolosos = df_grouped_periodo["hom_doloso"].mean()  # média mensal do período
 
-    # Buscar no dataset completo
-    df_mes_prev = df_full_hom[(df_full_hom["ano"] == ano_prev) & (df_full_hom["mes"] == mes_prev)]
+        df_grouped_prev = df_prev.groupby(["ano", "mes"])["hom_doloso"].mean().reset_index()
+        df_mes_prev = df_grouped_prev[(df_grouped_prev["ano"] == ano_prev) & (df_grouped_prev["mes"] == mes_prev)]
 
-    if not df_mes_prev.empty:
-        soma_atual = latest["hom_doloso"]
-        soma_prev = df_mes_prev["hom_doloso"].sum()
-        if soma_prev > 0:
-            homicidios_dolosos_pct = ((soma_atual - soma_prev) / soma_prev) * 100
+        if not df_mes_prev.empty:
+            media_prev = df_mes_prev["hom_doloso"].iloc[0]  # média mensal do mês anterior
+            if media_prev > 0:
+                homicidios_dolosos_pct = ((homicidios_dolosos - media_prev) / media_prev) * 100
 
-    # Latrocínios comparativos (com ano anterior)
+    # === Latrocínios (comparação com ano anterior) ===
     latrocinios = int(df_grouped["latrocinio"].sum())
     df_full = load_data()
     df_full["data"] = pd.to_datetime(df_full["ano"].astype(str) + "-" + df_full["mes"].astype(str) + "-01")
 
-    # Aplicar filtro de município (mas não de data!)
     if municipio:
         gdf_mun = gpd.read_file(SHAPEFILES["mcirc"])[["CD_MUN", "NM_MUN"]]
         gdf_mun["CD_MUN"] = gdf_mun["CD_MUN"].astype(str)
@@ -349,7 +349,6 @@ def dashboard_data():
         df_full = df_full.merge(gdf_mun, left_on="mcirc", right_on="CD_MUN", how="left")
         df_full = df_full[df_full["NM_MUN"] == municipio]
 
-    # Agora sim, comparar com o mesmo mês do ano anterior
     soma_ano_ant = 0
     for _, row in df_grouped.iterrows():
         ano_ant = int(row["ano"]) - 1
@@ -363,7 +362,6 @@ def dashboard_data():
     # === Mortes por intervenção policial e tendência ===
     mortes_intervencao_policial = df["hom_por_interv_policial"].mean()
 
-    # Calcular mês anterior ao início do período filtrado
     if inicio:
         inicio_dt = pd.to_datetime(inicio)
         mes_prev = inicio_dt.month - 1
@@ -372,10 +370,9 @@ def dashboard_data():
             mes_prev = 12
             ano_prev -= 1
 
-        # Usar df completo, apenas com filtro de município
         df_trend_base = load_data()
         df_trend_base["data"] = pd.to_datetime(df_trend_base["ano"].astype(str) + "-" + df_trend_base["mes"].astype(str) + "-01")
-        
+
         if municipio:
             gdf_mun = gpd.read_file(SHAPEFILES["mcirc"])[["CD_MUN", "NM_MUN"]]
             gdf_mun["CD_MUN"] = gdf_mun["CD_MUN"].astype(str)
@@ -389,7 +386,7 @@ def dashboard_data():
             tendencia_interv = "Indefinida"
         else:
             media_prev = df_prev_mes["hom_por_interv_policial"].mean()
-            ratio = mortes_intervencao_policial / media_prev
+            ratio = mortes_intervencao_policial / media_prev if media_prev > 0 else 1
             if ratio > 1.05:
                 tendencia_interv = "crescente"
             elif ratio < 0.95:
@@ -427,13 +424,14 @@ def dashboard_data():
             return None
         return obj
 
+    # Bloqueia comparação se início for inválido
     if not inicio or pd.to_datetime(inicio) < pd.Timestamp("2003-01-01"):
         homicidios_dolosos_pct = None
         variacao_latrocinio_anual_pct = None
-        
+
     return jsonify(replace_invalid({
         "letalidade_violenta_total": letalidade_total,
-        "homicidios_dolosos": homicidios_dolosos,
+        "homicidios_dolosos": round(homicidios_dolosos, 2),
         "homicidios_dolosos_pct": homicidios_dolosos_pct,
         "latrocinios": latrocinios,
         "variacao_latrocinio_anual_pct": variacao_latrocinio_anual_pct,
