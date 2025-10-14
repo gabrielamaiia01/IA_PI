@@ -29,7 +29,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             });
     });
 
-    // Gerar gráficos
+    // Função principal: gerar gráficos e imagens
     async function gerarGraficos() {
         const k = document.getElementById("num-clusters").value;
         const inicio = document.getElementById("data-inicio").value;
@@ -51,7 +51,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 return;
             }
 
-            // PCA Scatter
+            // ======== PCA SCATTER ========
             const canvasScatter = document.getElementById("pca-scatter");
             const ctxScatter = canvasScatter.getContext("2d");
             const clustersUnicos = [...new Set(data.pca_data.map(d => d.cluster))];
@@ -82,7 +82,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 }
             });
 
-            // Gráfico de importância (bar)
+            // ======== GRÁFICO DE IMPORTÂNCIA ========
             if (data.importancias) {
                 const div = document.getElementById("elbow-plot");
                 div.innerHTML = '<canvas id="importancia-chart"></canvas>';
@@ -106,7 +106,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                     },
                     options: {
                         responsive: true,
-                        maintainAspectRatio: false, // respeita o tamanho do container
+                        maintainAspectRatio: false,
                         scales: {
                             y: { beginAtZero: true, title: { display: true, text: "Importância" } },
                             x: { title: { display: true, text: "Variável" } }
@@ -115,15 +115,28 @@ document.addEventListener("DOMContentLoaded", async () => {
                     }
                 });
             }
-            if (document.getElementById("cluster-profile") && data.perfil_medio_img)
-                document.getElementById("cluster-profile").src = `${data.perfil_medio_img}?v=${new Date().getTime()}`;
-            
+
+            // ======== PERFIS MÉDIOS ========
+            const perfilCom = document.getElementById("perfil_com_registro");
+            const perfilSem = document.getElementById("perfil_sem_registro");
+
+            if (data.perfil_medio_img_com_registro_ocorrencias && perfilCom) {
+                perfilCom.src = `${data.perfil_medio_img_com_registro_ocorrencias}?v=${Date.now()}`;
+                perfilCom.style.display = "block";
+            }
+
+            if (data.perfil_medio_img_sem_registro_ocorrencias && perfilSem) {
+                perfilSem.src = `${data.perfil_medio_img_sem_registro_ocorrencias}?v=${Date.now()}`;
+                perfilSem.style.display = "block";
+            }
+
         } catch (err) {
             console.error("Erro ao carregar dados de agrupamento:", err);
             alert("Erro ao carregar dados. Veja o console para detalhes.");
         }
     }
-    // Aplicar filtros
+
+    // ======== FILTROS ========
     async function aplicarFiltros() {
         const municipioValido = municipios.find(
             m => m.toLowerCase() === inputMunicipio.value.toLowerCase()
@@ -138,7 +151,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     document.getElementById("btn-aplicar").addEventListener("click", aplicarFiltros);
 
-    // Exportar PDF
+    // ======== EXPORTAR PDF ========
     document.getElementById("btn-export-pdf").addEventListener("click", async () => {
         const { jsPDF } = window.jspdf;
         const pdf = new jsPDF("landscape", "px", "a4");
@@ -146,7 +159,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         const pageWidth = pdf.internal.pageSize.getWidth() - margin * 2;
         let yOffset = margin;
 
-        const elementos = document.querySelectorAll("canvas, #map-img");
+        const elementos = document.querySelectorAll("canvas, #map-img, #perfil-com-registro, #perfil-sem-registro");
 
         for (let el of elementos) {
             try {

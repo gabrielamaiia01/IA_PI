@@ -669,7 +669,7 @@ def agrupamentos_data():
         'aaapai', 'furto_veiculos', 'roubo_transeunte', 'cmp', 'risp', 'roubo_celular', 
         'outros_furtos', 'roubo_rua', 'apreensao_drogas_sem_autor', 'roubo_em_coletivo', 
         'outros_roubos', 'roubo_carga'
-    ])
+    ], errors="ignore")
 
     if dados_cluster.empty:
         return jsonify({"error": "Sem dados numéricos para agrupar."}), 400
@@ -704,18 +704,28 @@ def agrupamentos_data():
             df_cluster_profile = df_cluster_profile.drop(columns=[col_geo])
 
     # Normaliza para visualização
-    df_norm = (df_cluster_profile - df_cluster_profile.min()) / \
-              (df_cluster_profile.max() - df_cluster_profile.min())
 
-    perfil_img_path = os.path.join(MAP_FOLDER, f"perfil_medio_{k}.png")
+    # --- Imagem 1: sem 'registro_ocorrencias' ---
+    perfil_img_sem = os.path.join(MAP_FOLDER, f"perfil_medio_sem_registro_ocorrencias_{k}.png")
     fig1, ax1 = plt.subplots(figsize=(12, 6))
-    df_norm.plot(kind="bar", ax=ax1)
-    ax1.set_title("Perfil médio dos clusters (valores normalizados)")
-    ax1.set_ylabel("Intensidade relativa")
-    ax1.set_xticklabels([f"Cluster {i}" for i in df_norm.index], rotation=0)
+    df_cluster_profile.drop(columns=['registro_ocorrencias'], errors='ignore').plot(kind="bar", ax=ax1)
+    ax1.set_title("Perfil médio dos clusters (sem registro_ocorrencias)")
+    ax1.set_ylabel("Intensidade relativa (normalizada)")
+    ax1.set_xticklabels([f"Cluster {i}" for i in df_cluster_profile.drop(columns=['registro_ocorrencias'], errors='ignore').index], rotation=0)
     plt.tight_layout()
-    fig1.savefig(perfil_img_path, dpi=150)
+    fig1.savefig(perfil_img_sem, dpi=150)
     plt.close(fig1)
+
+    # --- Imagem 2: com 'registro_ocorrencias' ---
+    perfil_img_com = os.path.join(MAP_FOLDER, f"perfil_medio_com_registro_ocorrencias_{k}.png")
+    fig2, ax2 = plt.subplots(figsize=(12, 6))
+    df_cluster_profile.plot(kind="bar", ax=ax2)
+    ax2.set_title("Perfil médio dos clusters (com registro_ocorrencias)")
+    ax2.set_ylabel("Intensidade relativa (normalizada)")
+    ax2.set_xticklabels([f"Cluster {i}" for i in df_cluster_profile.index], rotation=0)
+    plt.tight_layout()
+    fig2.savefig(perfil_img_com, dpi=150)
+    plt.close(fig2)
 
     # Importância das variáveis
     importances = {}
@@ -730,7 +740,8 @@ def agrupamentos_data():
         "media_clusters": media_clusters,
         "pca_data": pca_data,
         "explained_variance": [round(v, 3) for v in pca.explained_variance_ratio_],
-        "perfil_medio_img": f"/static/img/perfil_medio_{k}.png",
+        "perfil_medio_img_sem_registro_ocorrencias": f"/static/img/perfil_medio_sem_registro_ocorrencias_{k}.png",
+        "perfil_medio_img_com_registro_ocorrencias": f"/static/img/perfil_medio_com_registro_ocorrencias_{k}.png",
         "importancias": importances_series.to_dict()
     })
 
@@ -738,4 +749,4 @@ def agrupamentos_data():
 # Main
 # ===========================
 if __name__ == "__main__":
-    app.run(host="127.0.0.1", port=5000, debug=True)
+    app.run(host="192.168.1.21", port=5000, debug=True)
