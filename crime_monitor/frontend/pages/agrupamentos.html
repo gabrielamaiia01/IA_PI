@@ -100,10 +100,25 @@
                        <img id="perfil_sem_registro" width="400" alt="Perfil médio dos clusters sem registro_ocorrências">
                     </div>
                 </div>
+                <div class="chart-card full-width">
+                    <h3>Mapa dos Clusters</h3>
+                    <label for="map-group">Mapa por:</label>
+                        <div class="map-controls">
+                            <select class="map-group" id="group-by">
+                                <option value="mcirc">Município</option>
+                                <option value="cisp" selected>CISP</option>
+                                <option value="aisp">AISP</option>
+                                <option value="risp">RISP</option>
+                            </select>
+                            <div class="chart-type">Mapa</div>
+                        </div>
+                    <div class="chart-placeholder">
+                        <img id="mapa_clusters_img" width="400" alt="Mapa dos clusters">
+                    </div>
+                </div>
             </section>
         </main>
     </div>
-
     <!-- libs externas -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-matrix@1.2.0/dist/chartjs-chart-matrix.min.js"></script>

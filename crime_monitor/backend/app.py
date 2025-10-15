@@ -3,9 +3,13 @@ import pandas as pd
 import numpy as np
 import os
 import geopandas as gpd
+import dask_geopandas as dgpd
+import warnings
+from shapely import speedups
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+from matplotlib.patches import Patch
 from sklearn.preprocessing import StandardScaler
 from sklearn.cluster import KMeans
 from sklearn.impute import SimpleImputer
@@ -13,6 +17,11 @@ from sklearn.decomposition import PCA
 import pickle
 import psycopg2
 from dotenv import load_dotenv
+
+warnings.filterwarnings("ignore")
+
+if speedups.available:
+    speedups.enable()
 
 # === 1. Carregar variáveis do arquivo .env ===
 load_dotenv()
@@ -43,6 +52,13 @@ SHAPEFILES = {
     "risp": os.path.join(BASE_DIR, 'data', 'Limite_RISP_WGS.shp')
 }
 
+SHAPEFILES_GPKG = {
+    "cisp": "lm_cisp_bd.gpkg",
+    "aisp": "lm_aisp_bd.gpkg",
+    "risp": "lm_risp_bd.gpkg",
+    "mcirc": "lm_municipio_bd.gpkg"
+}
+
 MAP_FOLDER = os.path.join(app.static_folder, "img")
 os.makedirs(MAP_FOLDER, exist_ok=True)
 
@@ -52,6 +68,14 @@ COLUMN_MAPPING = {
     "aisp": "aisp",
     "risp": "risp"
 }
+
+for key, shp_path in SHAPEFILES.items():
+    if not os.path.exists(SHAPEFILES_GPKG[key]):
+        print(f"Gerando {SHAPEFILES_GPKG[key]} a partir de {shp_path}...")
+        gdf = gpd.read_file(shp_path)
+        gdf.to_file(SHAPEFILES_GPKG[key], layer=key, driver="GPKG")
+    else:
+        print(f"{SHAPEFILES_GPKG[key]} já existe. Pulando...")
 
 # =======================
 # Carregar modelo
@@ -70,6 +94,10 @@ try:
     print(f"✓ Modelo carregado com sucesso! ({type(model).__name__})")
 except Exception as e:
     print(f"✗ Erro ao carregar modelo: {e}")
+
+df_clusters_global = None
+dados_scaled_global = None
+dados_cluster_global = None
 
 # ===========================
 # Função para carregar dados
@@ -636,6 +664,8 @@ def agrupamentos_data():
     fim = request.args.get("fim")
     municipio = request.args.get("municipio")
 
+    global df_clusters_global, dados_scaled_global, dados_cluster_global
+
     # Filtragem por data
     df["data"] = pd.to_datetime(df["ano"].astype(str) + "-" + df["mes"].astype(str) + "-01")
     if inicio:
@@ -736,6 +766,8 @@ def agrupamentos_data():
         importances[col] = inter / (intra + 1e-6)
     importances_series = pd.Series(importances).sort_values(ascending=False)
 
+    df_clusters_global = df.copy()
+
     return jsonify({
         "media_clusters": media_clusters,
         "pca_data": pca_data,
@@ -745,8 +777,108 @@ def agrupamentos_data():
         "importancias": importances_series.to_dict()
     })
 
+# cache global para shapefiles já lidos (chave: group_by)
+_gdf_cache = {}
+
+# ===========================
+# API - Mapa de Clusters
+# ===========================
+@app.route("/api/mapa_clusters")
+def mapa_clusters():
+    df = load_data()
+    group_by = request.args.get("group_by", "mcirc")
+    inicio = request.args.get("inicio")
+    fim = request.args.get("fim")
+    municipio = request.args.get("municipio")
+    k = int(request.args.get("k", 4))
+
+    shapefile = SHAPEFILES.get(group_by)
+    shapefile_col = COLUMN_MAPPING.get(group_by)
+    if not shapefile or not shapefile_col:
+        return jsonify({"error": "Agrupamento inválido"}), 400
+
+    gdf = gpd.read_file(shapefile)
+    if gdf.crs is None:
+        gdf = gdf.set_crs(epsg=4326)
+
+    # === Filtros de data ===
+    df["data"] = pd.to_datetime(df["ano"].astype(str) + "-" + df["mes"].astype(str) + "-01")
+    if inicio:
+        df = df[df["data"] >= pd.to_datetime(inicio)]
+    if fim:
+        df = df[df["data"] <= pd.to_datetime(fim)]
+
+    # === Filtrar município específico sem remover outras regiões do shapefile ===
+    if municipio and shapefile_col in gdf.columns:
+        df_grouped = df[df[group_by] == municipio].groupby(group_by).agg({
+            "letalidade_violenta": "sum",
+            "roubo_veiculo": "sum",
+            "estupro": "sum",
+            "estelionato": "sum",
+            "trafico_drogas": "sum",
+            "apf": "sum"
+        }).reset_index()
+    else:
+        df_grouped = df.groupby(group_by).agg({
+            "letalidade_violenta": "sum",
+            "roubo_veiculo": "sum",
+            "estupro": "sum",
+            "estelionato": "sum",
+            "trafico_drogas": "sum",
+            "apf": "sum"
+        }).reset_index()
+
+    features = ["letalidade_violenta", "roubo_veiculo", "estupro", "estelionato", "trafico_drogas", "apf"]
+    X = df_grouped[features].fillna(0)
+    X_scaled = StandardScaler().fit_transform(X)
+
+    # === KMeans com número de clusters dinâmico ===
+    kmeans = KMeans(n_clusters=k, random_state=42, n_init=10)
+    df_grouped["cluster"] = kmeans.fit_predict(X_scaled)
+
+    # === Merge mantendo todas as regiões ===
+    gdf[shapefile_col] = gdf[shapefile_col].astype(str)
+    df_grouped[group_by] = df_grouped[group_by].astype(str)
+    gdf = gdf.merge(df_grouped[[group_by, "cluster"]], left_on=shapefile_col, right_on=group_by, how="left")
+
+    # Preenche clusters ausentes com -1 (sem dados)
+    gdf["cluster"] = gdf["cluster"].fillna(-1).astype(int)
+
+    # === Paleta fixa por cluster (sempre a mesma cor para cada cluster) ===
+    fixed_colors = {
+        0: "#1f77b4",  # azul
+        1: "#ffc222",  # laranja
+        2: "#2ca02c",  # verde
+        3: "#d62728",  # vermelho
+        4: "#9467bd",  # roxo
+        -1: "#cccccc"  # cinza para regiões sem dados
+    }
+    gdf["color"] = gdf["cluster"].map(lambda c: fixed_colors.get(c, "#cccccc"))
+
+    # === Plot ===
+    fig, ax = plt.subplots(1, 1, figsize=(10, 10))
+    gdf.plot(color=gdf["color"], linewidth=0.8, edgecolor='0.8', ax=ax)
+
+    ax.set_axis_off()
+    plt.title("Mapa de Clusters de Criminalidade", fontsize=15)
+
+    legend_elements = [
+        Patch(facecolor=fixed_colors[i], edgecolor='0.8', label=f"Cluster {i}" if i >= 0 else "Sem dados")
+        for i in range(-1, k)
+    ]
+    ax.legend(handles=legend_elements, title="Clusters", loc="lower left")
+
+    params_str = f"clusters_{group_by}_{inicio}_{fim}_{municipio}_{k}".replace(" ", "_").replace(":", "_")
+    image_name = f"{params_str}.png"
+    image_path = os.path.join(MAP_FOLDER, image_name)
+
+    plt.savefig(image_path, bbox_inches="tight")
+    plt.close(fig)
+
+    return jsonify({"mapa_clusters": f"/static/img/{image_name}"})
+
 # ===========================
 # Main
 # ===========================
 if __name__ == "__main__":
-    app.run(host="192.168.1.21", port=5000, debug=True)
+    app.run(host="192.168.1.5", port=5000, debug=True)
