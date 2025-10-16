@@ -85,19 +85,12 @@
                         </div>
                     </div>
                 </div>
-
                 <div class="chart-card full-width">
-                    <h3>Perfil médio dos clusters com registro_ocorrencias</h3>
+                    <h3>Perfil médio dos clusters</h3>
                     <div class="chart-type">Barras</div>
-                    <div class="chart-placeholder">
-                       <img id="perfil_com_registro" width="400" alt="Perfil médio dos clusters com registro_ocorrencias">
-                    </div>
-                </div>
-                <div class="chart-card full-width">
-                    <h3>Perfil médio dos clusters sem registro_ocorrencias</h3>
-                    <div class="chart-type">Barras</div>
-                    <div class="chart-placeholder">
-                       <img id="perfil_sem_registro" width="400" alt="Perfil médio dos clusters sem registro_ocorrências">
+                    <div class="chart-placeholder" id="perfil-container">
+                        <!-- O gráfico interativo será inserido dinamicamente aqui pelo JS -->
+                        <p style="text-align:center; color:#777;">Carregue os dados para visualizar o gráfico.</p>
                     </div>
                 </div>
                 <div class="chart-card full-width">
@@ -125,6 +118,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/plotly.js-dist@latest"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 
     <script src="/static/js/agrupamentos.js"></script>
 </body>

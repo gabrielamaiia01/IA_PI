@@ -1,5 +1,6 @@
 let chartInstanceScatter = null;
 let chartInstanceImportancia = null;
+let chartInstancePerfil = null; // novo
 let municipios = [];
 
 // Guarda os dados já carregados para não recalcular
@@ -92,25 +93,94 @@ document.addEventListener("DOMContentLoaded", async () => {
                 if (chartInstanceImportancia) chartInstanceImportancia.destroy();
                 chartInstanceImportancia = new Chart(ctxImp, {
                     type: "bar",
-                    data: { labels, datasets: [{ label: 'Importância na formação dos clusters', data: valores, backgroundColor: valores.map(v => v >= 0 ? 'rgba(75, 192, 192, 0.7)' : 'rgba(255, 99, 132, 0.7)'), borderColor: valores.map(v => v >= 0 ? 'rgba(75, 192, 192, 1)' : 'rgba(255, 99, 132, 1)'), borderWidth: 1 }] },
-                    options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true, title: { display: true, text: "Importância" } }, x: { title: { display: true, text: "Variável" } } }, plugins: { legend: { display: false } } }
+                    data: { 
+                        labels, 
+                        datasets: [{
+                            label: 'Importância na formação dos clusters', 
+                            data: valores, 
+                            backgroundColor: valores.map(v => v >= 0 ? 'rgba(75, 192, 192, 0.7)' : 'rgba(255, 99, 132, 0.7)'), 
+                            borderColor: valores.map(v => v >= 0 ? 'rgba(75, 192, 192, 1)' : 'rgba(255, 99, 132, 1)'), 
+                            borderWidth: 1 
+                        }]
+                    },
+                    options: { 
+                        responsive: true, 
+                        maintainAspectRatio: false, 
+                        scales: { 
+                            y: { beginAtZero: true, title: { display: true, text: "Importância" } }, 
+                            x: { title: { display: true, text: "Variável" } } 
+                        }, 
+                        plugins: { legend: { display: false } } 
+                    }
                 });
             }
 
-            // ===== Perfis médios =====
-            const perfilCom = document.getElementById("perfil_com_registro");
-            const perfilSem = document.getElementById("perfil_sem_registro");
-            if (data.perfil_medio_img_com_registro_ocorrencias) {
-                perfilCom.src = `${data.perfil_medio_img_com_registro_ocorrencias}?v=${Date.now()}`;
-                perfilCom.style.display = "block";
-            }
-            if (data.perfil_medio_img_sem_registro_ocorrencias) {
-                perfilSem.src = `${data.perfil_medio_img_sem_registro_ocorrencias}?v=${Date.now()}`;
-                perfilSem.style.display = "block";
+            // ===== Perfil médio interativo =====
+            if (data.perfil_medio_data) {
+                const container = document.getElementById("perfil-container");
+                container.innerHTML = `<canvas id="perfilChart"></canvas>`;
+                const canvas = document.getElementById("perfilChart");
+                canvas.style.minHeight = "400px"; // altura mínima
+                canvas.style.width = "100%";
+
+                const ctxPerfil = canvas.getContext("2d");
+                const mediaClusters = data.perfil_medio_data;
+                const clusters = Object.keys(mediaClusters);
+                const variaveis = Object.keys(mediaClusters[clusters[0]]);
+
+                // Paleta de cores fixa
+                const coresFixas = [
+                    "#1f77b4", "#ff7f0e", "#2ca02c", "#d62728",
+                    "#9467bd", "#8c564b", "#e377c2", "#7f7f7f",
+                    "#bcbd22", "#17becf", "#a55194", "#393b79",
+                    "#637939", "#8c6d31", "#843c39", "#7b4173",
+                    "#3182bd", "#e6550d", "#31a354", "#756bb1"
+                ];
+
+                const datasets = variaveis.map((variavel, i) => ({
+                    label: variavel,
+                    data: clusters.map(c => mediaClusters[c][variavel]),
+                    backgroundColor: coresFixas[i % coresFixas.length],
+                    borderColor: "#333",
+                    borderWidth: 1
+                }));
+
+                if (chartInstancePerfil) chartInstancePerfil.destroy();
+                chartInstancePerfil = new Chart(ctxPerfil, {
+                    type: "bar",
+                    data: {
+                        labels: clusters.map(c => `Cluster ${c}`),
+                        datasets: datasets
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        layout: { padding: { bottom: 20 } }, // espaço para legenda
+                        plugins: {
+                            legend: {
+                                position: "top",
+                                labels: { usePointStyle: true },
+                                onClick: (e, legendItem, legend) => {
+                                    const ci = legend.chart;
+                                    const index = legendItem.datasetIndex;
+                                    const meta = ci.getDatasetMeta(index);
+                                    meta.hidden = meta.hidden === null ? !ci.data.datasets[index].hidden : null;
+                                    ci.update();
+                                }
+                            }
+                        },
+                        interaction: { mode: 'index', intersect: false },
+                        scales: {
+                            x: { title: { display: true, text: "Clusters" }, stacked: false },
+                            y: { beginAtZero: true, title: { display: true, text: "Intensidade relativa" } }
+                        }
+                    }
+                });
             }
 
             // ===== Atualiza mapa =====
             await atualizarMapa();
+
         } catch (err) {
             console.error("Erro ao carregar dados de agrupamento:", err);
             alert("Erro ao carregar dados. Veja o console para detalhes.");
@@ -157,3 +227,49 @@ document.addEventListener("DOMContentLoaded", async () => {
         await atualizarMapa();
     });
 });
+
+// ===== Função para exportar PDF =====
+document.getElementById("btn-export-pdf").addEventListener("click", async () => {
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF("p", "mm", "a4");
+    const margin = 10;
+    const pageWidth = pdf.internal.pageSize.getWidth() - 2 * margin;
+    const pageHeight = pdf.internal.pageSize.getHeight() - 2 * margin;
+    let yOffset = margin;
+
+    // Seleciona todos os elementos que queremos colocar no PDF
+    const elementos = [
+        document.getElementById("pca-scatter"),
+        document.getElementById("importancia-chart"),
+        document.getElementById("perfilChart"),
+        document.getElementById("mapa_clusters_img") // mapa
+    ].filter(el => el); // remove nulls caso algum ainda não exista
+
+    for (let el of elementos) {
+        let imgData;
+
+        if (el.tagName.toLowerCase() === "canvas") {
+            // Se for canvas, usamos html2canvas
+            imgData = await html2canvas(el, { scale: 2 }).then(c => c.toDataURL("image/png"));
+        } else if (el.tagName.toLowerCase() === "img") {
+            // Se for img (mapa), usamos direto src
+            imgData = el.src;
+        }
+
+        const imgProps = pdf.getImageProperties(imgData);
+        const pdfWidth = pageWidth;
+        const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+
+        if (yOffset + pdfHeight > pageHeight + margin) {
+            pdf.addPage();
+            yOffset = margin;
+        }
+
+        pdf.addImage(imgData, "PNG", margin, yOffset, pdfWidth, pdfHeight);
+        yOffset += pdfHeight + 10; // espaço entre imagens
+    }
+
+    pdf.save("graficos_agrupamento.pdf");
+});
+
+

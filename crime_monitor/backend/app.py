@@ -781,6 +781,7 @@ def agrupamentos_data():
         "explained_variance": [round(v, 3) for v in pca.explained_variance_ratio_],
         "perfil_medio_img_sem_registro_ocorrencias": f"/static/img/perfil_medio_sem_registro_ocorrencias_{k}.png",
         "perfil_medio_img_com_registro_ocorrencias": f"/static/img/perfil_medio_com_registro_ocorrencias_{k}.png",
+        "perfil_medio_data": df_cluster_profile.to_dict(orient="index"),
         "importancias": importances_series.to_dict()
     })
 
@@ -896,4 +897,4 @@ def mapa_clusters():
 # Main
 # ===========================
 if __name__ == "__main__":
-    app.run(host="192.168.1.5", port=5000, debug=True)
+    app.run(host="127.0.0.1", port=5000, debug=True)

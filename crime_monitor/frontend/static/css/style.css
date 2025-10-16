@@ -752,3 +752,8 @@ input:disabled {
     transform: translateY(-50%);
     pointer-events: none;
 }
+
+#perfil-container {
+    width: 100%;
+    min-height: 200px; /* aumenta se quiser */
+}
