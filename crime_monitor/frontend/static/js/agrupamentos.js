@@ -125,7 +125,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         const { inicio, fim } = dadosClustersCache;
 
         try {
-            const resMapa = await fetch(`/api/mapa_clusters?group_by=${group_by}&inicio=${inicio}&fim=${fim}&k=${document.getElementById("num-clusters").value}`);
+            const resMapa = await fetch(`/api/mapa_clusters?group_by=${group_by}&inicio=${inicio}&fim=${fim}&k=${document.getElementById("num-clusters").value}&mcirc=${inputMunicipio.value}`);
             if (!resMapa.ok) throw new Error(`Erro HTTP ${resMapa.status}`);
             const dataMapa = await resMapa.json();
 

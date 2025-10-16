@@ -17,6 +17,7 @@ from sklearn.decomposition import PCA
 import pickle
 import psycopg2
 from dotenv import load_dotenv
+import random
 
 warnings.filterwarnings("ignore")
 
@@ -789,6 +790,7 @@ _gdf_cache = {}
 # ===========================
 # API - Mapa de Clusters
 # ===========================
+
 @app.route("/api/mapa_clusters")
 def mapa_clusters():
     df = load_data()
@@ -824,8 +826,7 @@ def mapa_clusters():
     }).reset_index()
 
     features = ["letalidade_violenta", "roubo_veiculo", "estupro", "estelionato", "trafico_drogas", "apf"]
-    X = df_grouped[features].fillna(0)
-    X_scaled = StandardScaler().fit_transform(X)
+    X_scaled = StandardScaler().fit_transform(df_grouped[features].fillna(0))
 
     kmeans = KMeans(n_clusters=k, random_state=42, n_init=10)
     df_grouped["cluster"] = kmeans.fit_predict(X_scaled)
@@ -834,33 +835,55 @@ def mapa_clusters():
     gdf[shapefile_col] = gdf[shapefile_col].astype(str)
     df_grouped[group_by] = df_grouped[group_by].astype(str)
     gdf = gdf.merge(df_grouped[[group_by, "cluster"]], left_on=shapefile_col, right_on=group_by, how="left")
-
-    # Preenche clusters ausentes para não deixar regiões em branco
     gdf["cluster"] = gdf["cluster"].fillna(-1).astype(int)
 
     # === Paleta fixa por cluster ===
     fixed_colors = {
-        0: "#1f77b4",  # azul
-        1: "#ffc222",  # laranja
-        2: "#2ca02c",  # verde
-        3: "#d62728",  # vermelho
-        4: "#9467bd",  # roxo
-        -1: "#cccccc"  # cinza para regiões sem dados
+        0: "#1f77b4", 1: "#ffc222", 2: "#2ca02c", 3: "#d62728", 4: "#9467bd", -1: "#cccccc"
     }
+
+    # === Gerar cores aleatórias para clusters fora do fixed_colors ===
+    existing_colors = set(fixed_colors.values())
+    # clusters existentes
+    clusters_in_data = gdf["cluster"].unique()
+
+    # cores fixas padrão
+    default_fixed = {0: "#1f77b4", 1: "#ffc222", 2: "#2ca02c", 3: "#d62728", -1: "#cccccc"}
+
+    # inicializa fixed_colors com clusters já existentes que têm cor fixa
+    fixed_colors = {}
+    existing_colors = set(default_fixed.values())
+
+    for cluster in clusters_in_data:
+        if cluster in default_fixed:
+            fixed_colors[cluster] = default_fixed[cluster]
+        elif cluster == -1:
+            fixed_colors[cluster] = "#cccccc"
+        else:
+            # gera cor aleatória que não repita cores existentes
+            while True:
+                random_color = "#{:06x}".format(random.randint(0, 0xFFFFFF))
+                if random_color not in existing_colors:
+                    fixed_colors[cluster] = random_color
+                    existing_colors.add(random_color)
+                    break
+
+    # agora todos os clusters terão uma cor válida
     gdf["color"] = gdf["cluster"].map(fixed_colors)
 
     # === Plot ===
     fig, ax = plt.subplots(1, 1, figsize=(10, 10))
     gdf.plot(color=gdf["color"], linewidth=0.8, edgecolor='0.8', ax=ax)
-
     ax.set_axis_off()
     plt.title("Mapa de Clusters de Criminalidade", fontsize=15)
 
-    legend_elements = [Patch(facecolor=fixed_colors[i], edgecolor='0.8', label=f"Cluster {i}" if i >=0 else "Sem dados") 
-                       for i in range(-1, k)]
+    legend_elements = [
+        Patch(facecolor=fixed_colors[i], edgecolor='0.8', label=f"Cluster {i}" if i >= 0 else "Sem dados")
+        for i in sorted(fixed_colors.keys())
+    ]
     ax.legend(handles=legend_elements, title="Clusters", loc="lower left")
 
-    params_str = f"clusters_{group_by}_{inicio}_{fim}".replace(" ", "_").replace(":", "_")
+    params_str = f"clusters_{group_by}_{inicio}_{fim}_{k}".replace(" ", "_").replace(":", "_")
     image_name = f"{params_str}.png"
     image_path = os.path.join(MAP_FOLDER, image_name)
 
