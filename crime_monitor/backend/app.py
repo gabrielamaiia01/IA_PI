@@ -742,8 +742,11 @@ def agrupamentos_data():
     ax1.set_title("Perfil médio dos clusters (sem registro_ocorrencias)")
     ax1.set_ylabel("Intensidade relativa (normalizada)")
     ax1.set_xticklabels([f"Cluster {i}" for i in df_cluster_profile.drop(columns=['registro_ocorrencias'], errors='ignore').index], rotation=0)
+    # Legenda fora do gráfico
+    legend1 = ax1.legend(frameon=True, bbox_to_anchor=(1.02, 1), loc='upper left')  # fora à direita
+    legend1.get_frame().set_facecolor('none')  # fundo transparente
     plt.tight_layout()
-    fig1.savefig(perfil_img_sem, dpi=150)
+    fig1.savefig(perfil_img_sem, dpi=150, bbox_inches='tight')
     plt.close(fig1)
 
     # --- Imagem 2: com 'registro_ocorrencias' ---
@@ -753,8 +756,11 @@ def agrupamentos_data():
     ax2.set_title("Perfil médio dos clusters (com registro_ocorrencias)")
     ax2.set_ylabel("Intensidade relativa (normalizada)")
     ax2.set_xticklabels([f"Cluster {i}" for i in df_cluster_profile.index], rotation=0)
+    # Legenda fora do gráfico
+    legend2 = ax2.legend(frameon=True, bbox_to_anchor=(1.02, 1), loc='upper left')
+    legend2.get_frame().set_facecolor('none')
     plt.tight_layout()
-    fig2.savefig(perfil_img_com, dpi=150)
+    fig2.savefig(perfil_img_com, dpi=150, bbox_inches='tight')
     plt.close(fig2)
 
     # Importância das variáveis
@@ -789,7 +795,6 @@ def mapa_clusters():
     group_by = request.args.get("group_by", "mcirc")
     inicio = request.args.get("inicio")
     fim = request.args.get("fim")
-    municipio = request.args.get("municipio")
     k = int(request.args.get("k", 4))
 
     shapefile = SHAPEFILES.get(group_by)
@@ -808,43 +813,32 @@ def mapa_clusters():
     if fim:
         df = df[df["data"] <= pd.to_datetime(fim)]
 
-    # === Filtrar município específico sem remover outras regiões do shapefile ===
-    if municipio and shapefile_col in gdf.columns:
-        df_grouped = df[df[group_by] == municipio].groupby(group_by).agg({
-            "letalidade_violenta": "sum",
-            "roubo_veiculo": "sum",
-            "estupro": "sum",
-            "estelionato": "sum",
-            "trafico_drogas": "sum",
-            "apf": "sum"
-        }).reset_index()
-    else:
-        df_grouped = df.groupby(group_by).agg({
-            "letalidade_violenta": "sum",
-            "roubo_veiculo": "sum",
-            "estupro": "sum",
-            "estelionato": "sum",
-            "trafico_drogas": "sum",
-            "apf": "sum"
-        }).reset_index()
+    # === Agrupar dados ===
+    df_grouped = df.groupby(group_by).agg({
+        "letalidade_violenta": "sum",
+        "roubo_veiculo": "sum",
+        "estupro": "sum",
+        "estelionato": "sum",
+        "trafico_drogas": "sum",
+        "apf": "sum"
+    }).reset_index()
 
     features = ["letalidade_violenta", "roubo_veiculo", "estupro", "estelionato", "trafico_drogas", "apf"]
     X = df_grouped[features].fillna(0)
     X_scaled = StandardScaler().fit_transform(X)
 
-    # === KMeans com número de clusters dinâmico ===
     kmeans = KMeans(n_clusters=k, random_state=42, n_init=10)
     df_grouped["cluster"] = kmeans.fit_predict(X_scaled)
 
-    # === Merge mantendo todas as regiões ===
+    # === Merge sem excluir regiões ===
     gdf[shapefile_col] = gdf[shapefile_col].astype(str)
     df_grouped[group_by] = df_grouped[group_by].astype(str)
     gdf = gdf.merge(df_grouped[[group_by, "cluster"]], left_on=shapefile_col, right_on=group_by, how="left")
 
-    # Preenche clusters ausentes com -1 (sem dados)
+    # Preenche clusters ausentes para não deixar regiões em branco
     gdf["cluster"] = gdf["cluster"].fillna(-1).astype(int)
 
-    # === Paleta fixa por cluster (sempre a mesma cor para cada cluster) ===
+    # === Paleta fixa por cluster ===
     fixed_colors = {
         0: "#1f77b4",  # azul
         1: "#ffc222",  # laranja
@@ -853,7 +847,7 @@ def mapa_clusters():
         4: "#9467bd",  # roxo
         -1: "#cccccc"  # cinza para regiões sem dados
     }
-    gdf["color"] = gdf["cluster"].map(lambda c: fixed_colors.get(c, "#cccccc"))
+    gdf["color"] = gdf["cluster"].map(fixed_colors)
 
     # === Plot ===
     fig, ax = plt.subplots(1, 1, figsize=(10, 10))
@@ -862,13 +856,11 @@ def mapa_clusters():
     ax.set_axis_off()
     plt.title("Mapa de Clusters de Criminalidade", fontsize=15)
 
-    legend_elements = [
-        Patch(facecolor=fixed_colors[i], edgecolor='0.8', label=f"Cluster {i}" if i >= 0 else "Sem dados")
-        for i in range(-1, k)
-    ]
+    legend_elements = [Patch(facecolor=fixed_colors[i], edgecolor='0.8', label=f"Cluster {i}" if i >=0 else "Sem dados") 
+                       for i in range(-1, k)]
     ax.legend(handles=legend_elements, title="Clusters", loc="lower left")
 
-    params_str = f"clusters_{group_by}_{inicio}_{fim}_{municipio}_{k}".replace(" ", "_").replace(":", "_")
+    params_str = f"clusters_{group_by}_{inicio}_{fim}".replace(" ", "_").replace(":", "_")
     image_name = f"{params_str}.png"
     image_path = os.path.join(MAP_FOLDER, image_name)
 
