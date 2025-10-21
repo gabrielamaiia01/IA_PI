@@ -26,7 +26,7 @@
                 <span class="updated-date">Atualizado: Ago/2025</span>
             </header>
 
-            <!-- FILTROS -->
+            <!-- ===== FILTROS ===== -->
             <section class="filters">
                 <div class="filter-item k-input">
                     <label for="num-clusters">Número de clusters (K)</label>
@@ -39,28 +39,21 @@
                     <label for="data-inicio">Data início</label>
                     <input type="date" id="data-inicio">
                 </div>
-
-                <!-- Data fim -->
                 <div class="filter-item">
                     <label for="data-fim">Data fim</label>
                     <input type="date" id="data-fim">
                 </div>
-
-                <!-- Município -->
                 <div class="filter-item">
-                    <label for="regiao">Município</label>
+                    <label for="municipio">Município</label>
                     <input list="lista-municipios" id="municipio" placeholder="Digite ou selecione um município">
                     <datalist id="lista-municipios"></datalist>
                 </div>
-
                 <div class="filter-item">
-                    <button id="btn-aplicar" class="btn-aplicar">
-                        Aplicar
-                    </button>
+                    <button id="btn-aplicar" class="btn-aplicar">Aplicar</button>
                 </div>
             </section>
 
-            <!-- GRÁFICOS -->
+            <!-- ===== GRÁFICOS ===== -->
             <section class="charts">
                 <div class="charts-header">
                     <h2>Gráficos</h2>
@@ -74,52 +67,131 @@
                         <h3>Projeção dos Componentes Principais</h3>
                         <div class="chart-type">Scatterplot</div>
                         <div class="chart-placeholder">
-                           <canvas id="pca-scatter" width="450" height="300"></canvas>
+                           <canvas id="pca-scatter" width="450" height="450"></canvas>
                         </div>
                     </div>
                     <div class="chart-card">
-                        <h3>Importância dos variáveis nos clusters</h3>
+                        <h3>Importância das variáveis nos clusters</h3>
                         <div class="chart-type">Barras</div>
                         <div class="chart-placeholder">
                            <div id="elbow-plot"></div>
                         </div>
                     </div>
                 </div>
+
                 <div class="chart-card full-width">
                     <h3>Perfil médio dos clusters</h3>
                     <div class="chart-type">Barras</div>
                     <div class="chart-placeholder" id="perfil-container">
-                        <!-- O gráfico interativo será inserido dinamicamente aqui pelo JS -->
                         <p style="text-align:center; color:#777;">Carregue os dados para visualizar o gráfico.</p>
                     </div>
                 </div>
+
                 <div class="chart-card full-width">
                     <h3>Mapa dos Clusters</h3>
                     <label for="map-group">Mapa por:</label>
-                        <div class="map-controls">
-                            <select class="map-group" id="group-by">
-                                <option value="mcirc">Município</option>
-                                <option value="cisp" selected>CISP</option>
-                                <option value="aisp">AISP</option>
-                                <option value="risp">RISP</option>
-                            </select>
-                            <div class="chart-type">Mapa</div>
-                        </div>
+                    <div class="map-controls">
+                        <select class="map-group" id="group-by">
+                            <option value="mcirc">Município</option>
+                            <option value="cisp" selected>CISP</option>
+                            <option value="aisp">AISP</option>
+                            <option value="risp">RISP</option>
+                        </select>
+                        <div class="chart-type">Mapa</div>
+                    </div>
                     <div class="chart-placeholder">
                         <img id="mapa_clusters_img" width="400" alt="Mapa dos clusters">
                     </div>
                 </div>
             </section>
+
+            <!-- ===== PREVISÃO DE CLUSTER ===== -->
+            <section class="cluster-prediction">
+                <h2>Prever Cluster de Novos Dados</h2>
+                <form id="cluster-prediction-form">
+                    <div class="form-grid">
+                        <!-- Campos do formulário aqui (igual ao que você já tinha) -->
+                        <div class="form-field">
+                            <label for="cisp">CISP (Código da Delegacia)</label>
+                            <input type="number" id="cisp" name="cisp" placeholder="Ex: 1" required >
+                        </div>
+                        <div class="form-field">
+                            <label for="mes">Mês (1-12)</label>
+                            <input type="number" id="mes" name="mes" min="1" max="12" placeholder="Ex: 8" required>
+                        </div>
+                        <div class="form-field">
+                            <label for="ano">Ano</label>
+                            <input type="number" id="ano" name="ano" placeholder="Ex: 2025" required>
+                        </div>
+                        <div class="form-field">
+                            <label for="mcirc">MCIRC (Município/Circunscrição)</label>
+                            <input type="number" id="mcirc" name="mcirc" placeholder="Ex: 7" required>
+                        </div>
+                        <div class="form-field">
+                            <label for="letalidade_violenta">Letalidade Violenta</label>
+                            <input type="number" id="letalidade_violenta" name="letalidade_violenta" placeholder="Ex: 82" required>
+                        </div>
+                        <div class="form-field">
+                            <label for="tentat_hom">Tentativa de Homicídio</label>
+                            <input type="number" id="tentat_hom" name="tentat_hom" placeholder="Ex: 15" required>
+                        </div>
+                        <div class="form-field">
+                            <label for="estupro">Estupro</label>
+                            <input type="number" id="estupro" name="estupro" placeholder="Ex: 8" required>
+                        </div>
+                        <div class="form-field">
+                            <label for="lesao_corp_culposa">Lesão Corporal Culposa</label>
+                            <input type="number" id="lesao_corp_culposa" name="lesao_corp_culposa" placeholder="Ex: 25" required>
+                        </div>
+                        <div class="form-field">
+                            <label for="roubo_veiculo">Roubo de Veículo</label>
+                            <input type="number" id="roubo_veiculo" name="roubo_veiculo" placeholder="Ex: 120" required>
+                        </div>
+                        <div class="form-field">
+                            <label for="estelionato">Estelionato</label>
+                            <input type="number" id="estelionato" name="estelionato" placeholder="Ex: 45" required>
+                        </div>
+                        <div class="form-field">
+                            <label for="apreensao_drogas">Apreensão de Drogas</label>
+                            <input type="number" id="apreensao_drogas" name="apreensao_drogas" placeholder="Ex: 50" required>
+                        </div>
+                        <div class="form-field">
+                            <label for="trafico_drogas">Tráfico de Drogas</label>
+                            <input type="number" id="trafico_drogas" name="trafico_drogas" placeholder="Ex: 50" required>
+                        </div>
+                        <div class="form-field">
+                            <label for="apf">APF (Apreensão de Arma de Fogo)</label>
+                            <input type="number" id="apf" name="apf" placeholder="Ex: 12" required>
+                        </div>
+                        <div class="form-field">
+                            <label for="pessoas_desaparecidas">Pessoas Desaparecidas</label>
+                            <input type="number" id="pessoas_desaparecidas" name="pessoas_desaparecidas" placeholder="Ex: 25" required>
+                        </div>
+                        <div class="form-field">
+                            <label for="encontro_cadaver">Encontro de Cadáver</label>
+                            <input type="number" id="encontro_cadaver" name="encontro_cadaver"  placeholder="Ex: 2" required>
+                        </div>
+                        <div class="form-field">
+                            <label for="registro_ocorrencias">Registro de Ocorrências</label>
+                            <input type="number" id="registro_ocorrencias" name="registro_ocorrencias" placeholder="Ex: 850" required>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn-aplicar">Prever Cluster</button>
+                </form>
+
+                <div id="resultado-cluster" style="margin-top: 15px; font-weight: bold; text-align:center;"></div>
+            </section>
         </main>
     </div>
-    <!-- libs externas -->
+
+    <!-- ===== BIBLIOTECAS EXTERNAS ===== -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-matrix@1.2.0/dist/chartjs-chart-matrix.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/plotly.js-dist@latest"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 
+    <!-- ===== ARQUIVO PRINCIPAL ===== -->
     <script src="/static/js/agrupamentos.js"></script>
 </body>
 </html>

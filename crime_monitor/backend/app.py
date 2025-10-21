@@ -3,13 +3,14 @@ import pandas as pd
 import numpy as np
 import os
 import geopandas as gpd
-import dask_geopandas as dgpd
 import warnings
 from shapely import speedups
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from matplotlib.patches import Patch
+import matplotlib.cm as cm
+import matplotlib.colors as mcolors
 from sklearn.preprocessing import StandardScaler
 from sklearn.cluster import KMeans
 from sklearn.impute import SimpleImputer
@@ -18,6 +19,8 @@ import pickle
 import psycopg2
 from dotenv import load_dotenv
 import random
+import colorsys
+
 
 warnings.filterwarnings("ignore")
 
@@ -251,6 +254,50 @@ def salvar_previsao_banco(features_dict, prediction_value):
     except Exception as e:
         print("Erro ao inserir previsão no banco:", e)
 
+def generate_distinct_colors(k, fixed_colors=None):
+    """
+    Gera k cores distintas, evitando colisão com uma lista de cores fixas.
+    Retorna cores em hexadecimal.
+    :param k: número de cores a gerar
+    :param fixed_colors: lista de cores hex existentes a evitar
+    :return: lista de cores hex
+    """
+    if fixed_colors is None:
+        fixed_colors = []
+
+    # Converte cores fixas para RGB
+    print(f"Fixed colors: {fixed_colors}")
+    fixed_rgb = [mcolors.to_rgb(c) for c in fixed_colors.values()]
+
+    colors = []
+    attempt = 0
+    while len(colors) < k and attempt < k * 10:
+        # HSV equidistante
+        h = random.random()
+        s = 0.7 + 0.3 * random.random()  # saturação entre 0.7 e 1
+        v = 0.8 + 0.2 * random.random()  # valor entre 0.8 e 1
+        rgb = colorsys.hsv_to_rgb(h, s, v)
+
+        # Verifica se está suficientemente distante das cores fixas e já geradas
+        def is_distinct(rgb_new):
+            threshold = 0.3  # distância mínima Euclidiana no espaço RGB
+            for r in fixed_rgb + [mcolors.to_rgb(c) for c in colors]:
+                dist = sum((a - b) ** 2 for a, b in zip(rgb_new, r)) ** 0.5
+                if dist < threshold:
+                    return False
+            return True
+
+        if is_distinct(rgb):
+            colors.append('#{:02x}{:02x}{:02x}'.format(int(rgb[0]*255), int(rgb[1]*255), int(rgb[2]*255)))
+
+        attempt += 1
+
+    # Se não conseguiu gerar suficientes, completa com cores aleatórias
+    while len(colors) < k:
+        colors.append('#{:06x}'.format(random.randint(0, 0xFFFFFF)))
+
+    return colors
+
 # ===========================
 # Rotas de páginas
 # ===========================
@@ -474,7 +521,10 @@ def dashboard_data():
 @app.route('/api/medias')
 def api_medias():
     df = load_data()
-    medias = df.mean(numeric_only=True).to_dict()
+    if df.empty:
+        return jsonify({"error": "Nenhum dado disponível"}), 404
+
+    medias = {k: int(round(v)) for k, v in df.mean(numeric_only=True).items()}
     return jsonify(medias)
 
 # ===========================
@@ -702,6 +752,8 @@ def agrupamentos_data():
         'outros_roubos', 'roubo_carga'
     ], errors="ignore")
 
+    print(dados_cluster.columns)
+
     if dados_cluster.empty:
         return jsonify({"error": "Sem dados numéricos para agrupar."}), 400
 
@@ -714,6 +766,7 @@ def agrupamentos_data():
     dados_scaled = StandardScaler().fit_transform(dados_imp)
 
     # KMeans clustering
+    global kmeans
     kmeans = KMeans(n_clusters=k, random_state=42)
     clusters = kmeans.fit_predict(dados_scaled)
     df['cluster'] = clusters
@@ -791,85 +844,99 @@ _gdf_cache = {}
 # ===========================
 # API - Mapa de Clusters
 # ===========================
-
 @app.route("/api/mapa_clusters")
 def mapa_clusters():
-    df = load_data()
+    global kmeans, df_clusters_global  # usa os objetos globais já criados
+
+    if "kmeans" not in globals() or "df_clusters_global" not in globals():
+        return jsonify({"error": "Os clusters ainda não foram gerados. Execute /api/agrupamentos_data primeiro."}), 400
+
     group_by = request.args.get("group_by", "mcirc")
     inicio = request.args.get("inicio")
     fim = request.args.get("fim")
-    k = int(request.args.get("k", 4))
 
     shapefile = SHAPEFILES.get(group_by)
     shapefile_col = COLUMN_MAPPING.get(group_by)
     if not shapefile or not shapefile_col:
         return jsonify({"error": "Agrupamento inválido"}), 400
 
+    # carrega shapefile e garante CRS
     gdf = gpd.read_file(shapefile)
     if gdf.crs is None:
         gdf = gdf.set_crs(epsg=4326)
 
-    # === Filtros de data ===
+    # copia apenas os clusters calculados anteriormente
+    df = df_clusters_global.copy()
+
+    # === Filtros de data (para consistência visual) ===
     df["data"] = pd.to_datetime(df["ano"].astype(str) + "-" + df["mes"].astype(str) + "-01")
     if inicio:
         df = df[df["data"] >= pd.to_datetime(inicio)]
     if fim:
         df = df[df["data"] <= pd.to_datetime(fim)]
 
-    # === Agrupar dados ===
+    # === Prepara dados agrupados por região ===
+    if group_by not in df.columns:
+        return jsonify({"error": f"Coluna '{group_by}' não encontrada nos dados."}), 400
+
     df_grouped = df.groupby(group_by).agg({
-        "letalidade_violenta": "sum",
-        "roubo_veiculo": "sum",
-        "estupro": "sum",
-        "estelionato": "sum",
-        "trafico_drogas": "sum",
-        "apf": "sum"
+        "cluster": lambda x: x.mode()[0] if not x.mode().empty else -1  # cluster predominante
     }).reset_index()
 
-    features = ["letalidade_violenta", "roubo_veiculo", "estupro", "estelionato", "trafico_drogas", "apf"]
-    X_scaled = StandardScaler().fit_transform(df_grouped[features].fillna(0))
-
-    kmeans = KMeans(n_clusters=k, random_state=42, n_init=10)
-    df_grouped["cluster"] = kmeans.fit_predict(X_scaled)
-
-    # === Merge sem excluir regiões ===
+    # === Merge com shapefile ===
     gdf[shapefile_col] = gdf[shapefile_col].astype(str)
     df_grouped[group_by] = df_grouped[group_by].astype(str)
-    gdf = gdf.merge(df_grouped[[group_by, "cluster"]], left_on=shapefile_col, right_on=group_by, how="left")
+    gdf = gdf.merge(df_grouped, left_on=shapefile_col, right_on=group_by, how="left")
     gdf["cluster"] = gdf["cluster"].fillna(-1).astype(int)
 
-    # === Paleta fixa por cluster ===
-    fixed_colors = {
-        0: "#1f77b4", 1: "#ffc222", 2: "#2ca02c", 3: "#d62728", 4: "#9467bd", -1: "#cccccc"
+    # === Paleta de cores fixa ===
+    default_fixed = {
+        0:  "#1f77b4",  # azul forte
+        1:  "#ff7f0e",  # laranja vibrante
+        2:  "#2ca02c",  # verde médio
+        3:  "#d62728",  # vermelho
+        4:  "#9467bd",  # roxo
+        5:  "#8c564b",  # marrom
+        6:  "#e377c2",  # rosa
+        7:  "#17becf",  # ciano
+        8:  "#bcbd22",  # oliva
+        9:  "#7f7f7f",  # cinza neutro
+        10: "#000000",  # preto
+        11: "#ff1493",  # pink neon
+        12: "#228b22",  # verde floresta
+        13: "#ffd700",  # amarelo ouro
+        14: "#00ffff",  # ciano puro
+        15: "#ff4500",  # laranja avermelhado
+        16: "#4169e1",  # azul royal
+        17: "#ff00ff",  # magenta
+        18: "#ff8c00",  # laranja escuro (substitui o verde escuro)
+        19: "#a52a2a",  # marrom escuro
+        20: "#00ff00",  # verde neon
+        21: "#ff6347",  # tomate
+        22: "#40e0d0",  # turquesa
+        23: "#b22222",  # vermelho ferrugem
+        24: "#9932cc",  # roxo violeta
+        25: "#ffa500",  # laranja puro
+        26: "#4682b4",  # azul aço
+        27: "#adff2f",  # verde-limão
+        28: "#dc143c",  # carmesim
+        29: "#00ced1",  # azul-petróleo
+        30: "#8b008b",  # púrpura escuro
+        31: "#ff69b4",  # rosa claro
+        32: "#9acd32",  # verde amarelado
+        33: "#6495ed",  # azul claro
+        34: "#ffb6c1",  # rosa bebê
+        35: "#8b0000",  # vermelho escuro
+        36: "#2f4f4f",  # cinza-azulado escuro
+        -1: "#cccccc"   # neutro
     }
 
-    # === Gerar cores aleatórias para clusters fora do fixed_colors ===
-    existing_colors = set(fixed_colors.values())
-    # clusters existentes
-    clusters_in_data = gdf["cluster"].unique()
+    clusters_in_data = sorted(gdf["cluster"].unique())
 
-    # cores fixas padrão
-    default_fixed = {0: "#1f77b4", 1: "#ffc222", 2: "#2ca02c", 3: "#d62728", -1: "#cccccc"}
-
-    # inicializa fixed_colors com clusters já existentes que têm cor fixa
     fixed_colors = {}
-    existing_colors = set(default_fixed.values())
-
     for cluster in clusters_in_data:
-        if cluster in default_fixed:
-            fixed_colors[cluster] = default_fixed[cluster]
-        elif cluster == -1:
-            fixed_colors[cluster] = "#cccccc"
-        else:
-            # gera cor aleatória que não repita cores existentes
-            while True:
-                random_color = "#{:06x}".format(random.randint(0, 0xFFFFFF))
-                if random_color not in existing_colors:
-                    fixed_colors[cluster] = random_color
-                    existing_colors.add(random_color)
-                    break
+        fixed_colors[cluster] = default_fixed.get(cluster, f"#{np.random.randint(0, 0xFFFFFF):06x}")
 
-    # agora todos os clusters terão uma cor válida
     gdf["color"] = gdf["cluster"].map(fixed_colors)
 
     # === Plot ===
@@ -884,7 +951,8 @@ def mapa_clusters():
     ]
     ax.legend(handles=legend_elements, title="Clusters", loc="lower left")
 
-    params_str = f"clusters_{group_by}_{inicio}_{fim}_{k}".replace(" ", "_").replace(":", "_")
+    # nome do arquivo baseado nos filtros
+    params_str = f"clusters_{group_by}_{inicio}_{fim}".replace(" ", "_").replace(":", "_")
     image_name = f"{params_str}.png"
     image_path = os.path.join(MAP_FOLDER, image_name)
 
@@ -893,8 +961,37 @@ def mapa_clusters():
 
     return jsonify({"mapa_clusters": f"/static/img/{image_name}"})
 
+@app.route("/api/predizer_cluster", methods=["POST"])
+def predizer_cluster():
+    try:
+        data = request.get_json()
+        features = data.get("features")
+        if not features:
+            return jsonify({"error": "Nenhum dado fornecido."}), 400
+
+        k = int(data.get("k", 4))
+        feature_names_cluster= [
+            'cisp', 'mes', 'ano', 'mcirc', 'letalidade_violenta', 'tentat_hom', 'estupro',
+            'lesao_corp_culposa', 'roubo_veiculo', 'estelionato',
+            'apreensao_drogas', 'trafico_drogas', 'apf',
+            'pessoas_desaparecidas', 'encontro_cadaver', 'registro_ocorrencias'
+        ]
+        # Prepara os dados do usuário
+        X_novo = pd.DataFrame([features], columns=feature_names_cluster)
+        print(f"Predizendo cluster para k={k} com features: {X_novo.columns.tolist()}")
+        cluster_predito = int(kmeans.predict(X_novo)[0])
+
+        return jsonify({
+            "cluster": cluster_predito,
+            "mensagem": f"O registro informado pertence ao cluster {cluster_predito}.",
+            "k": k
+        })
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 # ===========================
 # Main
 # ===========================
 if __name__ == "__main__":
-    app.run(host="192.168.1.9", port=5000, debug=True)
+    app.run(host="172.26.42.255", port=5000, debug=True)

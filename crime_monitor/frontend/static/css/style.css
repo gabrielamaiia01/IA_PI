@@ -380,7 +380,7 @@ body {
 /* ============================
    Previsão - Estilos específicos
 ============================ */
-.prediction-controls {
+.prediction-controls, .cluster-prediction {
     background-color: #fff;
     padding: 20px;
     border-radius: 8px;
@@ -391,33 +391,33 @@ body {
     box-sizing: border-box;
 }
 
-.prediction-controls h2 {
+.prediction-controls h2, .cluster-prediction h2{
     margin-top: 0;
     font-size: 22px;
     color: #333;
     margin-bottom: 20px;
 }
 
-.prediction-controls .control-group {
+.prediction-controls .control-group, .cluster-prediction .control-group{
     display: flex;
     flex-wrap: wrap;
     gap: 20px;
     align-items: flex-end;
 }
 
-.prediction-controls .control-item {
+.prediction-controls .control-item, .cluster-prediction .control-item{
     flex: 1 1 auto;
     min-width: 150px;
 }
 
-.prediction-controls .control-item label {
+.prediction-controls .control-item label, .cluster-prediction .control-item label{
     display: block;
     margin-bottom: 5px;
     color: #555;
     font-size: 14px;
 }
 
-.prediction-controls .control-item select {
+.prediction-controls .control-item select, .cluster-prediction .control-item select{
     padding: 8px 12px;
     border: 1px solid #ddd;
     border-radius: 5px;
@@ -426,7 +426,7 @@ body {
     box-sizing: border-box;
 }
 
-.prediction-controls .generate-button {
+.prediction-controls .generate-button, .cluster-prediction .generate-button{
     background-color: #007bff;
     color: #fff;
     border: none;
@@ -438,7 +438,7 @@ body {
     white-space: nowrap;
 }
 
-.prediction-controls .generate-button:hover {
+.prediction-controls .generate-button:hover, .cluster-prediction .generate-button:hover{
     background-color: #0056b3;
 }
 
@@ -574,7 +574,9 @@ body {
         min-width: 100%;
         max-width: 100%;
     }
-    
+    .sidebar li {
+        width: 94%;
+    }
     .main-content {
         padding: 15px;
     }
@@ -717,7 +719,7 @@ input:disabled {
 
 #importancia-chart {
     width: 100%;
-    height: 270px;
+    height: 400px;
 }
 
 /* Estilo customizado para o select do mapa */
@@ -757,4 +759,87 @@ input:disabled {
 #perfil-container {
     width: 100%;
     min-height: 200px; /* aumenta se quiser */
+}
+
+.form-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 20px;
+    margin: 20px 0;
+}
+
+.form-field {
+    display: flex;
+    flex-direction: column;
+}
+
+.form-field label {
+    font-weight: 600;
+    margin-bottom: 8px;
+    color: #333;
+    font-size: 14px;
+}
+
+.form-field input {
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+    transition: border-color 0.3s;
+}
+
+.form-field input:focus {
+    outline: none;
+    border-color: #4CAF50;
+}
+
+.form-field input::placeholder {
+    color: #999;
+}
+
+.generate-button {
+    background: #4CAF50;
+    color: white;
+    border: none;
+    padding: 12px 32px;
+    border-radius: 6px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.3s;
+    margin-top: 20px;
+}
+
+.generate-button:hover {
+    background: #45a049;
+}
+
+.generate-button:disabled {
+    background: #ccc;
+    cursor: not-allowed;
+}
+
+.loading {
+    display: none;
+    color: #666;
+    font-style: italic;
+    margin-top: 10px;
+}
+
+.error-message {
+    display: none;
+    background: #ffebee;
+    color: #c62828;
+    padding: 12px;
+    border-radius: 4px;
+    margin-top: 10px;
+}
+
+.success-message {
+    display: none;
+    background: #e8f5e9;
+    color: #2e7d32;
+    padding: 12px;
+    border-radius: 4px;
+    margin-top: 10px;
 }
