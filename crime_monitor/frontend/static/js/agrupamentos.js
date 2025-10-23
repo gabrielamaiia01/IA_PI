@@ -9,7 +9,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     const datalist = document.getElementById("lista-municipios");
     const btnAplicar = document.getElementById("btn-aplicar");
     const groupBySelect = document.getElementById("group-by");
-    const btnExportPdf = document.getElementById("btn-export-pdf");
+    const btnExportPdf = document.getElementById("btn-export-agrupamentos");
 
     // ===== Carregar municípios =====
     try {
@@ -224,41 +224,37 @@ document.addEventListener("DOMContentLoaded", async () => {
     groupBySelect.addEventListener("change", async () => await atualizarMapa());
 
     // ===== Exportar PDF =====
-    btnExportPdf.addEventListener("click", async () => {
-        const { jsPDF } = window.jspdf;
-        const pdf = new jsPDF("p", "mm", "a4");
-        const margin = 10;
-        const pageWidth = pdf.internal.pageSize.getWidth() - 2 * margin;
-        const pageHeight = pdf.internal.pageSize.getHeight() - 2 * margin;
-        let yOffset = margin;
+    document.getElementById("btn-export-agrupamentos").addEventListener("click", async () => {
+        const dataInicio = document.getElementById("data-inicio").value;
+        const dataFim = document.getElementById("data-fim").value;
+        const municipio = inputMunicipio.value;
+        const groupBy = document.getElementById("group-by").value;
+        const n_clusters = document.getElementById("num-clusters").value;
 
-        const elementos = [
-            document.getElementById("pca-scatter"),
-            document.getElementById("importancia-chart"),
-            document.getElementById("perfilChart"),
-            document.getElementById("mapa_clusters_img")
-        ].filter(el => el);
+        const params = new URLSearchParams();
+        if (dataInicio) params.append("inicio", dataInicio);
+        if (dataFim) params.append("fim", dataFim);
+        if (municipio) params.append("municipio", municipio);
+        if (groupBy) params.append("group_by", groupBy);
+        if (n_clusters) params.append("k", n_clusters);
+        try {
+            const response = await fetch(`/api/export_agrupamentos_pdf?${params.toString()}`);
+            if (!response.ok) throw new Error("Erro ao gerar PDF");
 
-        for (let el of elementos) {
-            let imgData;
-            if (el.tagName.toLowerCase() === "canvas") {
-                imgData = await html2canvas(el, { scale: 2 }).then(c => c.toDataURL("image/png"));
-            } else imgData = el.src;
-
-            const imgProps = pdf.getImageProperties(imgData);
-            const pdfWidth = pageWidth;
-            const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
-
-            if (yOffset + pdfHeight > pageHeight + margin) {
-                pdf.addPage();
-                yOffset = margin;
-            }
-
-            pdf.addImage(imgData, "PNG", margin, yOffset, pdfWidth, pdfHeight);
-            yOffset += pdfHeight + 10;
+            // Cria o download automático do PDF
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = "relatorio_agrupamentos.pdf";
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            window.URL.revokeObjectURL(url);
+        } catch (err) {
+            console.error("Erro ao exportar PDF:", err);
+            alert("Erro ao gerar PDF. Verifique o servidor.");
         }
-
-        pdf.save("graficos_agrupamento.pdf");
     });
 
     // ===== Previsão de cluster =====

@@ -1,4 +1,4 @@
-from flask import Flask, render_template, jsonify, request
+from flask import Flask, render_template, jsonify, request, request, send_file
 import pandas as pd
 import numpy as np
 import os
@@ -20,7 +20,22 @@ import psycopg2
 from dotenv import load_dotenv
 import random
 import colorsys
+# -*- coding: utf-8 -*-
+import io
+import tempfile
+import requests
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib.pagesizes import A4
+import json
+app = Flask(__name__)
+import re
 
+# ----------------------------
+# Config: modelo de geração
+# ----------------------------
+# Usa FLAN-T5 small por ser leve e gerar textos coerentes.
+# Se quiser outro modelo (pt-br), substitua o string abaixo.
 
 warnings.filterwarnings("ignore")
 
@@ -35,6 +50,8 @@ DB_USER = os.getenv("DB_USER")
 DB_PASSWORD = os.getenv("DB_PASSWORD")
 DB_HOST = os.getenv("DB_HOST")
 DB_PORT = os.getenv("DB_PORT")
+OPENROUTER_API_KEY= os.getenv("OPENROUTER_API_KEY")
+IP_OR_HOST= os.getenv("IP_OR_HOST")
 
 app = Flask(
     __name__,
@@ -297,6 +314,482 @@ def generate_distinct_colors(k, fixed_colors=None):
         colors.append('#{:06x}'.format(random.randint(0, 0xFFFFFF)))
 
     return colors
+
+# ----------------------------
+# Função que usa o modelo para gerar descrições por gráfico
+# ----------------------------
+# --- Inicializa modelo local (uma vez) ---
+
+# Caminho local do modelo Mistral-7B-Instruct-v0.3
+# CORREÇÃO 2: Função de geração com fallback
+def gerar_texto_llama3(prompt, max_tokens=800, temperature=0.7, retries=2, wait=3):
+    """
+    Gera texto com o modelo LLaMA 3 (meta-llama/llama-3-8b-instruct) via OpenRouter.
+    Permite retries em caso de falha temporária.
+    
+    Args:
+        prompt (str): Prompt de entrada.
+        max_tokens (int): Máximo de tokens.
+        temperature (float): Criatividade do modelo.
+        retries (int): Número de tentativas em caso de falha.
+        wait (int): Segundos para aguardar entre tentativas.
+        
+    Returns:
+        str: Texto gerado ou mensagem de erro.
+    """
+    url = "https://openrouter.ai/api/v1/chat/completions"
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+    }
+    data = {
+        "model": "meta-llama/llama-3-8b-instruct",
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": temperature,
+        "max_tokens": max_tokens,
+    }
+
+    for attempt in range(retries + 1):
+        try:
+            resp = requests.post(url, json=data, headers=headers, timeout=60)
+            resp.raise_for_status()
+            resposta = resp.json()
+            texto = resposta["choices"][0]["message"]["content"]
+            return texto.strip()
+        except requests.exceptions.RequestException as e:
+            print(f"[ERRO LLAMA3] Tentativa {attempt+1} de {retries+1}: {e}")
+            if attempt < retries:
+                time.sleep(wait)
+            else:
+                return "Não foi possível gerar análise automática no momento. Consulte os gráficos."
+        except Exception as e:
+            print(f"[ERRO LLAMA3] Problema ao processar resposta: {e}")
+            return "Não foi possível gerar análise automática no momento. Consulte os gráficos."
+            
+# =========================
+# FUNÇÃO DE ANÁLISES
+# =========================
+def gerar_descricoes_dashboard(payload, group_by):
+    """
+    Gera descrições automáticas para os gráficos, dividindo prompts para cada gráfico.
+    """
+    descricoes = {
+        "linha_evolucao": "Análise não disponível.",
+        "barras_correlacao": "Análise não disponível.",
+        "scatter": "Análise não disponível.",
+        "mapa": "Análise não disponível."
+    }
+
+    base_url = "http://localhost:5000"
+    params_map = {
+        "inicio": payload.get("inicio", "2003-01-01"),
+        "fim": payload.get("fim", "2025-07-31"),
+        "municipio": payload.get("municipio"),
+        "group_by": group_by
+    }
+
+    # ================== EVOLUÇÃO TEMPORAL ==================
+    evo = payload.get("evolucao_temporal", [])
+    if evo:
+        xs = [r.get("x", "") for r in evo]
+        ys = [r.get("y", 0) for r in evo if isinstance(r.get("y"), (int, float))]
+        if len(ys) > 2:
+            coef = float(np.polyfit(range(len(ys)), ys, 1)[0])
+            media = float(np.mean(ys))
+            pico = xs[int(np.argmax(ys))] if xs else "N/A"
+            vale = xs[int(np.argmin(ys))] if xs else "N/A"
+            resumo_evo = f"Tendência linear {coef:.2f}, média {media:.2f}, pico em {pico}, mínimo em {vale}."
+        else:
+            resumo_evo = "Dados insuficientes para análise temporal."
+    else:
+        resumo_evo = "Sem dados de evolução temporal."
+
+    prompt_evo = f"""
+Você é um analista de segurança pública.
+Analise os seguintes dados de evolução temporal e produza uma resposta curta (2-3 frases) em português:
+
+[EVOLUÇÃO TEMPORAL]
+{resumo_evo}
+"""
+    descricoes["linha_evolucao"] = gerar_texto_llama3(prompt_evo)
+
+    # ================== CORRELAÇÃO ENTRE CRIMES ==================
+    corr = payload.get("correlacao_crimes", {})
+    resumo_corr = f"Correlação entre crimes: { {k:v for k,v in corr.items() if v is not None and not np.isnan(v)} }" if corr else "Sem dados de correlação."
+    prompt_corr = f"""
+Você é um analista de segurança pública.
+Analise os seguintes dados de correlação entre crimes e produza uma resposta curta (2-3 frases) em português:
+
+[CORRELAÇÃO ENTRE CRIMES]
+{resumo_corr}
+"""
+    descricoes["barras_correlacao"] = gerar_texto_llama3(prompt_corr)
+
+    # ================== SCATTER ==================
+    scatter = payload.get("scatter_data", [])
+    if scatter:
+        xs_s = [p.get("x", 0) for p in scatter]
+        ys_s = [p.get("y", 0) for p in scatter]
+        if len(xs_s) > 2 and len(ys_s) > 2:
+            corrcoef = float(np.corrcoef(xs_s, ys_s)[0, 1])
+            resumo_scatter = f"Correlação de Pearson: {corrcoef:.2f}"
+        else:
+            resumo_scatter = "Dados insuficientes para dispersão."
+    else:
+        resumo_scatter = "Sem dados de dispersão."
+
+    prompt_scatter = f"""
+Você é um analista de segurança pública.
+Analise os dados de dispersão e produza uma resposta curta (2-3 frases) em português:
+
+[DISPERSÃO ROUBO x LETALIDADE]
+{resumo_scatter}
+"""
+    descricoes["scatter"] = gerar_texto_llama3(prompt_scatter)
+
+    # ================== MAPA TEMÁTICO ==================
+    map_data = {}
+    try:
+        resp_map = requests.get(f"{base_url}/api/map_image/{group_by}", params=params_map, timeout=10)
+        resp_map.raise_for_status()
+        map_data = resp_map.json()
+    except:
+        map_data = {}
+
+    if map_data.get("data"):
+        texto_map = "Letalidade por região:\n" + "\n".join(
+            [f"• {item.get('regiao','N/A')}: {item.get('letalidade_violenta',0)}" for item in map_data["data"]]
+        )
+        resumo_mapa = texto_map.strip()
+    else:
+        resumo_mapa = "Dados de mapa não disponíveis."
+
+    prompt_mapa = f"""
+Você é um analista de segurança pública.
+Analise os dados do mapa temático e produza uma resposta curta (2-3 frases) em português:
+
+[MAPA TEMÁTICO]
+{resumo_mapa}
+"""
+    descricoes["mapa"] = gerar_texto_llama3(prompt_mapa)
+
+    return descricoes
+
+# =========================
+# FUNÇÃO PARA CRIAR GRÁFICOS
+# =========================
+def criar_graficos_temp_dashboard(payload, tmp_dir, group_by): 
+    saved = {}
+
+    # ===============================
+    # Linha de evolução
+    # ===============================
+    evo = payload.get("evolucao_temporal", [])
+    if evo:
+        xs = [r["x"] for r in evo]
+        ys = [r["y"] for r in evo]
+
+        xs_fmt = []
+        for s in xs:
+            try:
+                dt = pd.to_datetime(s)
+                xs_fmt.append(dt.strftime("%b/%y"))
+            except:
+                xs_fmt.append(s)
+
+        plt.figure(figsize=(8,4))
+        plt.plot(xs_fmt, ys, marker='o', linewidth=2)
+        plt.title("Evolução temporal da Letalidade Violenta")
+        plt.xlabel("Período")
+        plt.ylabel("Letalidade Violenta")
+
+        step = max(1, len(xs_fmt) // 10)
+        plt.xticks(ticks=range(0, len(xs_fmt), step), 
+                   labels=[xs_fmt[i] for i in range(0, len(xs_fmt), step)], rotation=45)
+        plt.grid(True, linestyle='--', alpha=0.6)
+
+        caminho = os.path.join(tmp_dir, "linha_evolucao.png")
+        plt.tight_layout()
+        plt.savefig(caminho)
+        plt.close()
+        saved["linha_evolucao"] = caminho
+
+    # ===============================
+    # Correlação
+    # ===============================
+    corr = payload.get("correlacao_crimes", {})
+    if corr:
+        keys = list(corr.keys())
+        vals = [corr[k] for k in keys]
+        plt.figure(figsize=(8,4))
+        plt.bar(range(len(vals)), vals)
+        plt.xticks(range(len(vals)), [k.replace("_"," ") for k in keys], rotation=45)
+        plt.ylim(-1,1)
+        plt.title("Correlação com Letalidade Violenta")
+        plt.grid(axis='y', linestyle='--', alpha=0.6)
+        caminho = os.path.join(tmp_dir, "barras_correlacao.png")
+        plt.tight_layout()
+        plt.savefig(caminho)
+        plt.close()
+        saved["barras_correlacao"] = caminho
+
+    # ===============================
+    # Dispersão
+    # ===============================
+    scatter = payload.get("scatter_data", [])
+    if scatter:
+        xs = [p["x"] for p in scatter]
+        ys = [p["y"] for p in scatter]
+        plt.figure(figsize=(6,6))
+        plt.scatter(xs, ys)
+        plt.title("Roubo na rua x Letalidade Violenta")
+        plt.xlabel("Roubo na rua")
+        plt.ylabel("Letalidade Violenta")
+        plt.grid(True, linestyle='--', alpha=0.6)
+        caminho = os.path.join(tmp_dir, "scatter.png")
+        plt.tight_layout()
+        plt.savefig(caminho)
+        plt.close()
+        saved["scatter"] = caminho
+
+    # ===============================
+    # 🗺️ Mapa (pega diretamente do endpoint map_image)
+    # ===============================
+    try:
+        base_url = "http://localhost:5000"  # ajuste se usar outra porta/host
+        params = {
+            "inicio": payload.get("inicio", "2003-01-01"),
+            "fim": payload.get("fim", "2025-07-31"),
+            "municipio": payload.get("municipio")
+        }
+        resp = requests.get(f"{base_url}/api/map_image/{group_by}", params=params, timeout=20)
+        if resp.status_code == 200:
+            map_json = resp.json()
+            map_url = f"{base_url}{map_json.get('image_url')}"
+            if map_url:
+                r = requests.get(map_url, timeout=10)
+                if r.status_code == 200:
+                    caminho = os.path.join(tmp_dir, "mapa.png")
+                    with open(caminho, "wb") as f:
+                        f.write(r.content)
+                    saved["mapa"] = caminho
+    except Exception as e:
+        print(f"[ERRO mapa]: {e}")
+
+    return saved
+
+def gerar_descricoes_agrupamentos(payload, group_by):
+    """
+    Gera descrições automáticas para os gráficos de agrupamentos:
+    - Scatter PCA
+    - Perfil médio dos clusters
+    - Importância das variáveis
+    - Mapa dos clusters
+    """
+    descricoes = {
+        "scatter_pca": "Análise não disponível.",
+        "perfil_medio_clusters": "Análise não disponível.",
+        "importancia_variaveis": "Análise não disponível.",
+        "mapa_clusters": "Análise não disponível."
+    }
+
+    try:
+        # =====================
+        # SCATTER PCA
+        # =====================
+        pca_data = payload.get("pca_data", [])
+        resumo_scatter = "Sem dados de PCA para dispersão."
+        if pca_data and len(pca_data) > 1:
+            xs = [p.get("pca1", 0) for p in pca_data]
+            ys = [p.get("pca2", 0) for p in pca_data]
+            clusters = [p.get("cluster", 0) for p in pca_data]
+            if len(xs) > 2 and len(ys) > 2:
+                corrcoef = float(np.corrcoef(xs, ys)[0, 1])
+                resumo_scatter = f"Correlação PCA1 x PCA2: {corrcoef:.2f}. Total de clusters: {len(set(clusters))}."
+
+        prompt_scatter = f"""
+Você é um analista de segurança pública.
+Analise os seguintes dados de PCA e produza uma resposta curta (2-3 frases) em português:
+
+[DISPERSÃO PCA]
+{resumo_scatter}
+"""
+        descricoes["scatter_pca"] = gerar_texto_llama3(prompt_scatter)
+
+        # =====================
+        # PERFIL MÉDIO DOS CLUSTERS
+        # =====================
+        perfil_medio_data = payload.get("perfil_medio_data", {})
+        resumo_perfil = "Sem dados de perfil médio dos clusters."
+        if perfil_medio_data:
+            resumo_perfil = ""
+            for cluster, medias in perfil_medio_data.items():
+                resumo_perfil += f"Cluster {cluster}: " + ", ".join([f"{k}={v}" for k, v in medias.items()]) + "; "
+            resumo_perfil = resumo_perfil.strip()
+
+        prompt_perfil = f"""
+Você é um analista de segurança pública.
+Analise os dados de perfil médio dos clusters e produza uma resposta curta (2-3 frases) em português:
+
+[PERFIL MÉDIO DOS CLUSTERS]
+{resumo_perfil}
+"""
+        descricoes["perfil_medio_clusters"] = gerar_texto_llama3(prompt_perfil)
+
+        # =====================
+        # IMPORTÂNCIA DAS VARIÁVEIS
+        # =====================
+        importancias = payload.get("importancias", {})
+        resumo_importancias = "Sem dados de importâncias."
+        if importancias:
+            top_vars = sorted(importancias.items(), key=lambda x: x[1], reverse=True)[:5]
+            resumo_importancias = ", ".join([f"{k} ({v:.2f})" for k, v in top_vars])
+
+        prompt_importancia = f"""
+Você é um analista de segurança pública.
+Analise as importâncias das variáveis e produza uma resposta curta (2-3 frases) em português:
+
+[IMPORTÂNCIA DAS VARIÁVEIS]
+{resumo_importancias}
+"""
+        descricoes["importancia_variaveis"] = gerar_texto_llama3(prompt_importancia)
+
+        # =====================
+        # MAPA DOS CLUSTERS
+        # =====================
+        base_url = f"http://{IP_OR_HOST}:5000"
+        params = {
+            "inicio": payload.get("inicio", "2003-01-01"),
+            "fim": payload.get("fim", "2025-07-31"),
+            "municipio": payload.get("municipio", ""),
+            "group_by": group_by,
+            "k": payload.get("k", 4)
+        }
+
+        resumo_mapa = "Dados de mapa não disponíveis."
+        try:
+            resp = requests.get(f"{base_url}/api/mapa_clusters", params=params, timeout=20)
+            resp.raise_for_status()
+            map_data = resp.json()
+            if map_data.get("data"):
+                resumo_mapa = ""
+                shapefile_col = [c for c in map_data["data"][0].keys() if c != "cluster"][0]
+                for item in map_data["data"]:
+                    regiao = item.get(shapefile_col, "N/A")
+                    valor = item.get("cluster", -1)
+                    resumo_mapa += f"{regiao}: cluster {valor}; "
+                resumo_mapa = resumo_mapa.strip()
+        except Exception as e:
+            print(f"[Erro mapa_clusters] {e}")
+
+        prompt_mapa = f"""
+Você é um analista de segurança pública.
+Analise os dados do mapa dos clusters e produza uma resposta curta (2-3 frases) em português:
+
+[MAPA DOS CLUSTERS]
+{resumo_mapa}
+"""
+        descricoes["mapa_clusters"] = gerar_texto_llama3(prompt_mapa)
+
+        return descricoes
+
+    except Exception as e:
+        print(f"Erro geral ao gerar descrições de agrupamentos: {e}")
+        return {
+            "scatter_pca": "Erro",
+            "perfil_medio_clusters": "Erro",
+            "importancia_variaveis": "Erro",
+            "mapa_clusters": "Erro"
+        }
+
+def criar_graficos_temp_agrupamentos(payload, tmp_dir, group_by):
+    saved = {}
+
+    # ===============================
+    # Scatter PCA com cores por cluster
+    # ===============================
+    pca_data = payload.get("pca_data", [])
+    if pca_data:
+        xs = [p.get("pca1", 0) for p in pca_data]
+        ys = [p.get("pca2", 0) for p in pca_data]
+        clusters = [p.get("cluster", 0) for p in pca_data]  # pega o cluster de cada ponto
+
+        plt.figure(figsize=(6,6))
+        scatter = plt.scatter(xs, ys, c=clusters, cmap='tab10', alpha=0.7)
+        plt.title("Projeção PCA dos Clusters")
+        plt.xlabel("Componente Principal 1")
+        plt.ylabel("Componente Principal 2")
+        plt.grid(True, linestyle='--', alpha=0.6)
+        plt.legend(*scatter.legend_elements(), title="Clusters")
+        caminho = os.path.join(tmp_dir, "scatter_pca.png")
+        plt.tight_layout()
+        plt.savefig(caminho)
+        plt.close()
+        saved["scatter_pca"] = caminho
+
+    # ===============================
+    # Perfil médio dos clusters
+    # ===============================
+    perfil_medio_data = payload.get("perfil_medio_data", {})
+    if perfil_medio_data:
+        df_perfil = pd.DataFrame(perfil_medio_data).T
+        plt.figure(figsize=(12,6))
+        df_perfil.plot(kind="bar")
+        plt.title("Perfil Médio dos Clusters")
+        plt.ylabel("Intensidade relativa")
+        plt.xlabel("Cluster")
+        plt.xticks(rotation=0)
+        plt.legend(frameon=True, bbox_to_anchor=(1.02,1), loc='upper left')
+        plt.tight_layout()
+        caminho = os.path.join(tmp_dir, "perfil_medio_clusters.png")
+        plt.savefig(caminho, dpi=150, bbox_inches='tight')
+        plt.close()
+        saved["perfil_medio_clusters"] = caminho
+
+    # ===============================
+    # Importância das variáveis
+    # ===============================
+    importancias = payload.get("importancias", {})
+    if importancias:
+        importancias_sorted = dict(sorted(importancias.items(), key=lambda x: x[1], reverse=True))
+        plt.figure(figsize=(10,6))
+        plt.bar(range(len(importancias_sorted)), list(importancias_sorted.values()))
+        plt.xticks(range(len(importancias_sorted)), list(importancias_sorted.keys()), rotation=45)
+        plt.title("Importância das Variáveis nos Clusters")
+        plt.ylabel("Importância relativa")
+        plt.tight_layout()
+        caminho = os.path.join(tmp_dir, "importancia_variaveis.png")
+        plt.savefig(caminho, dpi=150, bbox_inches='tight')
+        plt.close()
+        saved["importancia_variaveis"] = caminho
+
+    # ===============================
+    # Mapa temático dos clusters
+    # ===============================
+    try:
+        base_url = f"http://{IP_OR_HOST}:5000"
+        params = {
+            "inicio": payload.get("inicio", "2003-01-01"),
+            "fim": payload.get("fim", "2025-07-31"),
+            "municipio": payload.get("municipio", ""),
+            "group_by": group_by,  # USA O PARÂMETRO RECEBIDO, NÃO O DO PAYLOAD
+            "k": payload.get("k", 4)
+        }
+        resp = requests.get(f"{base_url}/api/mapa_clusters", params=params, timeout=20)
+        if resp.status_code == 200:
+            map_json = resp.json()
+            map_url = f"{base_url}{map_json.get('mapa_clusters')}"
+            if map_url:
+                r = requests.get(map_url, timeout=10)
+                if r.status_code == 200:
+                    caminho = os.path.join(tmp_dir, "mapa_clusters.png")
+                    with open(caminho, "wb") as f:
+                        f.write(r.content)
+                    saved["mapa_clusters"] = caminho
+    except Exception as e:
+        print(f"[ERRO mapa clusters]: {e}")
+
+    return saved
 
 # ===========================
 # Rotas de páginas
@@ -591,7 +1084,7 @@ def map_image(group_by):
     plt.savefig(image_path, bbox_inches="tight")
     plt.close(fig)
 
-    return jsonify({"image_url": f"/static/img/{image_name}"})
+    return jsonify({"image_url": f"/static/img/{image_name}", "data": gdf[[shapefile_col, "letalidade_violenta"]].to_dict(orient="records")})
 
 # ===========================
 # API - Features do modelo
@@ -855,6 +1348,7 @@ def mapa_clusters():
     inicio = request.args.get("inicio")
     fim = request.args.get("fim")
 
+    print(f"Gerando mapa de clusters agrupados por {group_by}...")
     shapefile = SHAPEFILES.get(group_by)
     shapefile_col = COLUMN_MAPPING.get(group_by)
     if not shapefile or not shapefile_col:
@@ -959,7 +1453,7 @@ def mapa_clusters():
     plt.savefig(image_path, bbox_inches="tight")
     plt.close(fig)
 
-    return jsonify({"mapa_clusters": f"/static/img/{image_name}"})
+    return jsonify({"mapa_clusters": f"/static/img/{image_name}", "data": gdf[[shapefile_col, "cluster"]].to_dict(orient="records")})
 
 @app.route("/api/predizer_cluster", methods=["POST"])
 def predizer_cluster():
@@ -990,8 +1484,168 @@ def predizer_cluster():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+# ----------------------------
+# Rota principal: gera o PDF e retorna
+# ----------------------------
+@app.route("/api/export_dashboard_pdf")
+def export_dashboard_pdf():
+    inicio = request.args.get("inicio") or "2003-01-01"
+    fim = request.args.get("fim") or "2025-07-31"
+    municipio = request.args.get("municipio")
+    group_by = request.args.get("group_by") or "mcirc"
+    params = {"inicio":inicio,"fim":fim,"municipio":municipio,"group_by":group_by}
+
+    # 1) Obter dados do dashboard
+    try:
+        base_url = request.url_root.rstrip('/')
+        response = requests.get(f"{base_url}/api/dashboard_data", params=params, timeout=30)
+        response.raise_for_status()
+        payload = response.json()
+    except Exception as e:
+        print(f"[ERRO API /dashboard_data] {e}")
+        return jsonify({"erro":str(e)}), 500
+
+    # 2) Gerar descrições automáticas
+    try:
+        descricoes = gerar_descricoes_dashboard(payload, group_by)
+    except:
+        descricoes = {
+            "linha_evolucao": "Consulte o gráfico de evolução temporal.",
+            "barras_correlacao": "Consulte o gráfico de correlações.",
+            "scatter": "Consulte o gráfico de dispersão.",
+            "mapa": "Consulte o mapa temático."
+        }
+
+    # 3) Criar PDF
+    try:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            saved_imgs = criar_graficos_temp_dashboard(payload,tmpdir,group_by)
+            buffer = io.BytesIO()
+            doc = SimpleDocTemplate(buffer, pagesize=A4)
+            styles = getSampleStyleSheet()
+            story = []
+
+            # Cabeçalho
+            story.append(Paragraph("<b>Relatório do Dashboard - Monitor de Criminalidade RJ</b>", styles["Title"]))
+            story.append(Spacer(1,12))
+            story.append(Paragraph(f"<b>Período:</b> {params['inicio']} – {params['fim']}", styles["Normal"]))
+            story.append(Paragraph(f"<b>Município:</b> {params['municipio'] or 'Todos'}", styles["Normal"]))
+            story.append(Spacer(1,20))
+
+            # KPIs principais
+            story.append(Paragraph("<b>Indicadores Principais</b>", styles["Heading2"]))
+            story.append(Paragraph(f"• Letalidade Violenta Total: {payload.get('letalidade_violenta_total',0)}", styles["Normal"]))
+            story.append(Paragraph(f"• Homicídios Dolosos (média): {payload.get('homicidios_dolosos',0)}", styles["Normal"]))
+            pct = payload.get("homicidios_dolosos_pct")
+            pct_text = f"{pct:.2f}%" if pct is not None else "N/A"
+            story.append(Paragraph(f"• Variação vs. mês anterior: {pct_text}", styles["Normal"]))
+            story.append(Paragraph(f"• Homícidios Por Intervenção Policial: {payload.get('mortes_intervencao_policial',0)}", styles["Normal"]))
+            story.append(Spacer(1,20))
+
+            # Seções
+            sections = [
+                ("linha_evolucao","Evolução Temporal da Letalidade Violenta"),
+                ("barras_correlacao","Correlação entre Crimes e Letalidade"),
+                ("scatter","Relação entre Roubo na Rua e Letalidade"),
+                ("mapa","Distribuição Geográfica da Letalidade")
+            ]
+
+            for chave,titulo in sections:
+                story.append(Paragraph(f"<b>{titulo}</b>", styles["Heading2"]))
+                story.append(Spacer(1,6))
+                story.append(Paragraph(descricoes.get(chave,"Análise não disponível."), styles["Normal"]))
+                story.append(Spacer(1,8))
+                if saved_imgs.get(chave):
+                    story.append(Image(saved_imgs[chave], width=480, height=240 if chave!="scatter" else 300))
+                story.append(Spacer(1,16))
+
+            story.append(Spacer(1,20))
+            story.append(Paragraph("<i>Relatório gerado automaticamente com IA (LLaMA 3) - Monitor RJ.</i>", styles["Normal"]))
+
+            doc.build(story)
+            buffer.seek(0)
+            nome_pdf = f"relatorio_dashboard_{params.get('inicio','sem_data')}.pdf"
+            return send_file(buffer, as_attachment=True, download_name=nome_pdf, mimetype="application/pdf")
+    except Exception as e:
+        print(f"[ERRO PDF] {e}")
+        return jsonify({"erro":"Falha ao gerar PDF"}), 500
+
+@app.route("/api/export_agrupamentos_pdf")
+def export_agrupamentos_pdf():
+    inicio = request.args.get("inicio") or "2003-01-01"
+    fim = request.args.get("fim") or "2025-07-31"
+    municipio = request.args.get("municipio")
+    group_by = request.args.get("group_by") or "mcirc"
+    k = request.args.get("k") or 4
+    params = {"inicio":inicio,"fim":fim,"municipio":municipio,"group_by":group_by, "k": k}
+
+    # 1) Obter dados dos agrupamentos
+    try:
+        base_url = request.url_root.rstrip('/')
+        response = requests.get(f"{base_url}/api/agrupamentos_data", params=params, timeout=30)
+        response.raise_for_status()
+        payload = response.json()
+    except Exception as e:
+        print(f"[ERRO API /agrupamentos_data] {e}")
+        return jsonify({"erro":str(e)}), 500
+
+    # 2) Gerar descrições automáticas
+    try:
+        descricoes = gerar_descricoes_agrupamentos(payload, group_by)
+    except:
+        descricoes = {
+            "scatter_pca": "Consulte o gráfico de projeção PCA.",
+            "perfil_medio_clusters": "Consulte o gráfico de perfil médio dos clusters.",
+            "importancia_variaveis": "Consulte o gráfico de importância das variáveis.",
+            "mapa_clusters": "Consulte o mapa temático dos clusters."
+        }
+
+    # 3) Criar PDF
+    try:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            saved_imgs = criar_graficos_temp_agrupamentos(payload,tmpdir,group_by)
+            buffer = io.BytesIO()
+            doc = SimpleDocTemplate(buffer, pagesize=A4)
+            styles = getSampleStyleSheet()
+            story = []
+
+            # Cabeçalho
+            story.append(Paragraph("<b>Relatório de Agrupamentos - Monitor de Criminalidade RJ</b>", styles["Title"]))
+            story.append(Spacer(1,12))
+            story.append(Paragraph(f"<b>Período:</b> {params['inicio']} – {params['fim']}", styles["Normal"]))
+            story.append(Paragraph(f"<b>Município:</b> {params['municipio'] or 'Todos'}", styles["Normal"]))
+            story.append(Spacer(1,20))
+
+            # Seções
+            sections = [
+                ("scatter_pca","Projeção PCA dos Clusters"),
+                ("perfil_medio_clusters","Perfil Médio dos Clusters"),
+                ("importancia_variaveis","Importância das Variáveis nos Clusters"),
+                ("mapa_clusters","Mapa Temático dos Clusters")
+            ]
+
+            for chave,titulo in sections:
+                story.append(Paragraph(f"<b>{titulo}</b>", styles["Heading2"]))
+                story.append(Spacer(1,6))
+                story.append(Paragraph(descricoes.get(chave,"Análise não disponível."), styles["Normal"]))
+                story.append(Spacer(1,8))
+                if saved_imgs.get(chave):
+                    story.append(Image(saved_imgs[chave], width=480, height=240))
+                story.append(Spacer(1,16))
+
+            story.append(Spacer(1,20))
+            story.append(Paragraph("<i>Relatório gerado automaticamente com IA (LLaMA 3) - Monitor RJ.</i>", styles["Normal"]))
+
+            doc.build(story)
+            buffer.seek(0)
+            nome_pdf = f"relatorio_agrupamentos_{params.get('inicio','sem_data')}.pdf"
+            return send_file(buffer, as_attachment=True, download_name=nome_pdf, mimetype="application/pdf")
+    except Exception as e:
+        print(f"[ERRO PDF AGRUPAMENTOS] {e}")
+        return jsonify({"erro":"Falha ao gerar PDF"}), 500
+
 # ===========================
 # Main
 # ===========================
 if __name__ == "__main__":
-    app.run(host="172.26.42.255", port=5000, debug=True)
+    app.run(host=IP_OR_HOST, port=5000, debug=True)
