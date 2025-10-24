@@ -305,4 +305,35 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
         });
     }
+    async function preencherSelects() {
+        try {
+            const response = await fetch('/api/valores_select');
+            const data = await response.json();
+            console.log(data);
+
+            // Preenche CISP
+            const cispSelect = document.getElementById('cisp');
+            data.cisps.forEach(c => {
+                const option = document.createElement('option');
+                option.value = c;
+                option.textContent = c;
+                cispSelect.appendChild(option);
+            });
+
+            // Preenche MCIRC
+            const mcircSelect = document.getElementById('mcirc');
+            data.mcircs.forEach(m => {
+                const option = document.createElement('option');
+                option.value = m;
+                option.textContent = m;
+                mcircSelect.appendChild(option);
+            });
+
+        } catch (err) {
+            console.error("Erro ao preencher selects:", err);
+        }
+    }
+
+    preencherSelects();
+
 });
