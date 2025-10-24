@@ -457,11 +457,12 @@ Analise os dados de dispersão e produza uma resposta curta (2-3 frases) em port
         map_data = {}
 
     if map_data.get("data"):
-        print(map_data.get("data"))
-        texto_map = "Letalidade por região:\n" + "\n".join(
-            [f"• {item.get('regiao','N/A')}: {item.get('letalidade_violenta',0)}" for item in map_data["data"]]
-        )
-        resumo_mapa = texto_map.strip()
+        texto_map = "Letalidade violenta por município:\n" + "\n".join([
+            f"• {item.get('NM_MUN', 'Desconhecido')} ({item.get('CD_MUN', '-')}) — {int(item.get('letalidade_violenta', 0))}"
+            for item in map_data["data"]
+            if item.get('letalidade_violenta', 0) > 0
+        ])
+        resumo_mapa = texto_map.strip() or "Nenhuma letalidade registrada."
     else:
         resumo_mapa = "Dados de mapa não disponíveis."
 
@@ -472,6 +473,7 @@ Analise os dados do mapa temático e produza uma resposta curta (2-3 frases) em 
 [MAPA TEMÁTICO]
 {resumo_mapa}
 """
+    print(prompt_mapa)
     descricoes["mapa"] = gerar_texto_llama3(prompt_mapa)
 
     return descricoes
@@ -1052,21 +1054,37 @@ def map_image(group_by):
     if gdf.crs is None:
         gdf = gdf.set_crs(epsg=4326)
 
+    # 🔹 Shapefile de referência de municípios (mantém geometria!)
+    municipios_ref = gpd.read_file(SHAPEFILES["mcirc"])[["CD_MUN", "NM_MUN", "geometry"]]
+    municipios_ref["CD_MUN"] = municipios_ref["CD_MUN"].astype(str)
+
+    # 🔹 Filtro por data
     df["data"] = pd.to_datetime(df["ano"].astype(str) + "-" + df["mes"].astype(str) + "-01")
     if inicio:
         df = df[df["data"] >= pd.to_datetime(inicio)]
     if fim:
         df = df[df["data"] <= pd.to_datetime(fim)]
 
-    if municipio and "NM_MUN" in gdf.columns:
-        gdf = gdf[gdf["NM_MUN"] == municipio]
-
+    # 🔹 Agrega os dados conforme o agrupamento
     df_grouped = df.groupby(group_by)["letalidade_violenta"].sum().reset_index()
     df_grouped[group_by] = df_grouped[group_by].astype(str)
     gdf[shapefile_col] = gdf[shapefile_col].astype(str)
     gdf = gdf.merge(df_grouped, left_on=shapefile_col, right_on=group_by, how="left")
     gdf["letalidade_violenta"] = gdf["letalidade_violenta"].fillna(0)
 
+    # 🔹 Garante sempre CD_MUN e NM_MUN
+    if "CD_MUN" in gdf.columns:
+        # Se o shapefile base já tem CD_MUN, merge com NM_MUN
+        gdf = gdf.merge(municipios_ref[["CD_MUN", "NM_MUN"]], on="CD_MUN", how="left")
+    else:
+        # Se não tiver CD_MUN (ex: AISP/CISP/RISP), faz join espacial
+        gdf = gpd.sjoin(gdf, municipios_ref, how="left", predicate="intersects")
+
+    # 🔹 Filtro por município (opcional)
+    if municipio:
+        gdf = gdf[gdf["NM_MUN"] == municipio]
+
+    # 🔹 Gera o mapa
     fig, ax = plt.subplots(1, 1, figsize=(10, 10))
     gdf.plot(
         column="letalidade_violenta",
@@ -1085,7 +1103,29 @@ def map_image(group_by):
     plt.savefig(image_path, bbox_inches="tight")
     plt.close(fig)
 
-    return jsonify({"image_url": f"/static/img/{image_name}", "data": gdf[[shapefile_col, "letalidade_violenta"]].to_dict(orient="records")})
+    # 🔹 Normaliza colunas de NM_MUN e CD_MUN
+    if "NM_MUN_y" in gdf.columns:
+        gdf["NM_MUN"] = gdf["NM_MUN_y"]
+    elif "NM_MUN_x" in gdf.columns:
+        gdf["NM_MUN"] = gdf["NM_MUN_x"]
+    else:
+        gdf["NM_MUN"] = None
+
+    if "CD_MUN" not in gdf.columns:
+        gdf["CD_MUN"] = None
+
+    # 🔹 Substitui qualquer NaN por valores válidos JSON
+    gdf["letalidade_violenta"] = gdf["letalidade_violenta"].fillna(0)
+    gdf["CD_MUN"] = gdf["CD_MUN"].fillna("")
+    gdf["NM_MUN"] = gdf["NM_MUN"].fillna("")
+
+    # 🔹 Saída final
+    data_saida = gdf[["CD_MUN", "NM_MUN", "letalidade_violenta"]].drop_duplicates().to_dict(orient="records")
+
+    return jsonify({
+        "image_url": f"/static/img/{image_name}",
+        "data": data_saida
+    })
 
 # ===========================
 # API - Features do modelo
@@ -1562,9 +1602,7 @@ def export_dashboard_pdf():
             story.append(Paragraph("<b>Indicadores Principais</b>", styles["Heading2"]))
             story.append(Paragraph(f"• Letalidade Violenta Total: {payload.get('letalidade_violenta_total',0)}", styles["Normal"]))
             story.append(Paragraph(f"• Homicídios Dolosos (média): {payload.get('homicidios_dolosos',0)}", styles["Normal"]))
-            pct = payload.get("homicidios_dolosos_pct")
-            pct_text = f"{pct:.2f}%" if pct is not None else "N/A"
-            story.append(Paragraph(f"• Variação vs. mês anterior: {pct_text}", styles["Normal"]))
+            story.append(Paragraph(f"• Soma de latrocínios: {payload.get('latrocinios',0)}", styles["Normal"]))
             story.append(Paragraph(f"• Homícidios Por Intervenção Policial: {payload.get('mortes_intervencao_policial',0)}", styles["Normal"]))
             story.append(Spacer(1,20))
 
