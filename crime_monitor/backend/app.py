@@ -418,7 +418,7 @@ Analise os seguintes dados de evolução temporal e produza uma resposta curta (
     resumo_corr = f"Correlação entre crimes: { {k:v for k,v in corr.items() if v is not None and not np.isnan(v)} }" if corr else "Sem dados de correlação."
     prompt_corr = f"""
 Você é um analista de segurança pública.
-Analise os seguintes dados de correlação entre crimes e produza uma resposta curta (2-3 frases) em português:
+Analise os seguintes dados de correlação entre a variável letalidade e os crimes e produza uma resposta curta (2-3 frases) em português:
 
 [CORRELAÇÃO ENTRE CRIMES]
 {resumo_corr}
@@ -457,6 +457,7 @@ Analise os dados de dispersão e produza uma resposta curta (2-3 frases) em port
         map_data = {}
 
     if map_data.get("data"):
+        print(map_data.get("data"))
         texto_map = "Letalidade por região:\n" + "\n".join(
             [f"• {item.get('regiao','N/A')}: {item.get('letalidade_violenta',0)}" for item in map_data["data"]]
         )
