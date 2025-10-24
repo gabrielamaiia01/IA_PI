@@ -1198,6 +1198,31 @@ def previsao_api():
         "media_previsoes_valores": media_previsoes_valores
     })
 
+@app.route('/api/valores_select', methods=['GET'])
+def get_cisps():
+    try:
+        # Lê o shapefile CISP
+        mapa_cisp = gpd.read_file(SHAPEFILES["cisp"])
+        coluna_cisp = "cisp"
+        codigos_cisp = sorted(mapa_cisp[coluna_cisp].dropna().unique())
+
+        # Lê o shapefile MCIRC
+        mapa_mcirc = gpd.read_file(SHAPEFILES["mcirc"])
+        coluna_mcirc = "CD_MUN"
+        codigos_mcirc = sorted(mapa_mcirc[coluna_mcirc].dropna().unique())
+
+        # ✅ Converte todos os valores para tipos nativos do Python
+        codigos_cisp = [int(c) if isinstance(c, (np.integer, int)) else str(c) for c in codigos_cisp]
+        codigos_mcirc = [int(m) if isinstance(m, (np.integer, int)) else str(m) for m in codigos_mcirc]
+
+        return jsonify({
+            "cisps": codigos_cisp,
+            "mcircs": codigos_mcirc
+        })
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 # ===========================
 # API - Agrupamentos
 # ===========================

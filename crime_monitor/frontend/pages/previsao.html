@@ -34,7 +34,9 @@
                         <!-- Campos do formulário aqui (igual ao que você já tinha) -->
                         <div class="form-field">
                             <label for="cisp">CISP (Código da Delegacia)</label>
-                            <input type="number" id="cisp" name="cisp" placeholder="Ex: 1" required>
+                            <select id="cisp" name="cisp" required>
+                                <option value="" disabled selected>Escolha um CISP</option>
+                            </select>
                         </div>
                         <div class="form-field">
                             <label for="mes">Mês (1-12)</label>
@@ -46,7 +48,9 @@
                         </div>
                         <div class="form-field">
                             <label for="mcirc">MCIRC (Município/Circunscrição)</label>
-                            <input type="number" id="mcirc" name="mcirc"  value="7" disabled>
+                            <select id="mcirc" name="mcirc" required>
+                                <option value="" disabled selected>Escolha um MCIRC</option>
+                            </select>
                         </div>
                         <div class="form-field">
                             <label for="tentat_hom">Tentativa de Homicídio</label>

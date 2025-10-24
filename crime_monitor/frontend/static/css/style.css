@@ -780,7 +780,7 @@ input:disabled {
     font-size: 14px;
 }
 
-.form-field input {
+.form-field input, .form-field select {
     padding: 10px;
     border: 1px solid #ddd;
     border-radius: 4px;
