@@ -456,15 +456,24 @@ Analise os dados de dispersão e produza uma resposta curta (2-3 frases) em port
     except:
         map_data = {}
 
+    # map_data é o JSON retornado pelo map_image
+    group_label = {
+        "mcirc": "município",
+        "cisp": "CISP",
+        "aisp": "AISP",
+        "risp": "RISP"
+    }.get(group_by, "agrupamento")
+
     if map_data.get("data"):
-        texto_map = "Letalidade violenta por município:\n" + "\n".join([
-            f"• {item.get('NM_MUN', 'Desconhecido')} ({item.get('CD_MUN', '-')}) — {int(item.get('letalidade_violenta', 0))}"
+        texto_map = f"Letalidade violenta por {group_label}:\n" + "\n".join([
+            f"• {item.get('NM_MUN', item.get(group_by, 'Desconhecido'))} "
+            f"({item.get('CD_MUN', '-')}) — {int(item.get('letalidade_violenta', 0))}"
             for item in map_data["data"]
             if item.get('letalidade_violenta', 0) > 0
         ])
-        resumo_mapa = texto_map.strip() or "Nenhuma letalidade registrada."
+        resumo_mapa = texto_map.strip() or f"Nenhuma letalidade registrada por {group_label}."
     else:
-        resumo_mapa = "Dados de mapa não disponíveis."
+        resumo_mapa = f"Dados de mapa por {group_label} não disponíveis."
 
     prompt_mapa = f"""
 Você é um analista de segurança pública.
@@ -1054,10 +1063,6 @@ def map_image(group_by):
     if gdf.crs is None:
         gdf = gdf.set_crs(epsg=4326)
 
-    # 🔹 Shapefile de referência de municípios (mantém geometria!)
-    municipios_ref = gpd.read_file(SHAPEFILES["mcirc"])[["CD_MUN", "NM_MUN", "geometry"]]
-    municipios_ref["CD_MUN"] = municipios_ref["CD_MUN"].astype(str)
-
     # 🔹 Filtro por data
     df["data"] = pd.to_datetime(df["ano"].astype(str) + "-" + df["mes"].astype(str) + "-01")
     if inicio:
@@ -1065,24 +1070,49 @@ def map_image(group_by):
     if fim:
         df = df[df["data"] <= pd.to_datetime(fim)]
 
-    # 🔹 Agrega os dados conforme o agrupamento
+    # 🔹 Soma letalidade por agrupamento
     df_grouped = df.groupby(group_by)["letalidade_violenta"].sum().reset_index()
     df_grouped[group_by] = df_grouped[group_by].astype(str)
     gdf[shapefile_col] = gdf[shapefile_col].astype(str)
     gdf = gdf.merge(df_grouped, left_on=shapefile_col, right_on=group_by, how="left")
     gdf["letalidade_violenta"] = gdf["letalidade_violenta"].fillna(0)
 
-    # 🔹 Garante sempre CD_MUN e NM_MUN
-    if "CD_MUN" in gdf.columns:
-        # Se o shapefile base já tem CD_MUN, merge com NM_MUN
-        gdf = gdf.merge(municipios_ref[["CD_MUN", "NM_MUN"]], on="CD_MUN", how="left")
-    else:
-        # Se não tiver CD_MUN (ex: AISP/CISP/RISP), faz join espacial
-        gdf = gpd.sjoin(gdf, municipios_ref, how="left", predicate="intersects")
+    # 🔹 Define colunas de código e nome conforme agrupamento
+    if group_by == "mcirc":
+        nome_col = "NM_MUN"
+        codigo_col = "CD_MUN"
 
-    # 🔹 Filtro por município (opcional)
-    if municipio:
-        gdf = gdf[gdf["NM_MUN"] == municipio]
+        # Garante que NM_MUN existe
+        if nome_col not in gdf.columns:
+            municipios_ref = gpd.read_file(SHAPEFILES["mcirc"])[["CD_MUN", "NM_MUN"]]
+            municipios_ref["CD_MUN"] = municipios_ref["CD_MUN"].astype(str)
+            gdf = gdf.merge(municipios_ref, on="CD_MUN", how="left")
+
+    elif group_by == "cisp":
+        nome_col = "NOME_CISP" if "NOME_CISP" in gdf.columns else shapefile_col
+        codigo_col = shapefile_col
+
+    elif group_by == "aisp":
+        nome_col = "NOME_AISP" if "NOME_AISP" in gdf.columns else shapefile_col
+        codigo_col = shapefile_col
+
+    elif group_by == "risp":
+        nome_col = "NOME_RISP" if "NOME_RISP" in gdf.columns else shapefile_col
+        codigo_col = shapefile_col
+
+    else:
+        nome_col = shapefile_col
+        codigo_col = shapefile_col
+
+    # 🔹 Cria colunas caso ainda não existam
+    if nome_col not in gdf.columns:
+        gdf[nome_col] = ""
+    if codigo_col not in gdf.columns:
+        gdf[codigo_col] = ""
+
+    # 🔹 Filtra por município, se aplicável
+    if municipio and nome_col in gdf.columns:
+        gdf = gdf[gdf[nome_col] == municipio]
 
     # 🔹 Gera o mapa
     fig, ax = plt.subplots(1, 1, figsize=(10, 10))
@@ -1103,30 +1133,18 @@ def map_image(group_by):
     plt.savefig(image_path, bbox_inches="tight")
     plt.close(fig)
 
-    # 🔹 Normaliza colunas de NM_MUN e CD_MUN
-    if "NM_MUN_y" in gdf.columns:
-        gdf["NM_MUN"] = gdf["NM_MUN_y"]
-    elif "NM_MUN_x" in gdf.columns:
-        gdf["NM_MUN"] = gdf["NM_MUN_x"]
-    else:
-        gdf["NM_MUN"] = None
-
-    if "CD_MUN" not in gdf.columns:
-        gdf["CD_MUN"] = None
-
-    # 🔹 Substitui qualquer NaN por valores válidos JSON
+    # 🔹 Normaliza e exporta os dados corretos
     gdf["letalidade_violenta"] = gdf["letalidade_violenta"].fillna(0)
-    gdf["CD_MUN"] = gdf["CD_MUN"].fillna("")
-    gdf["NM_MUN"] = gdf["NM_MUN"].fillna("")
+    gdf[nome_col] = gdf[nome_col].fillna("")
+    gdf[codigo_col] = gdf[codigo_col].fillna("")
 
-    # 🔹 Saída final
-    data_saida = gdf[["CD_MUN", "NM_MUN", "letalidade_violenta"]].drop_duplicates().to_dict(orient="records")
+    data_saida = gdf[[codigo_col, nome_col, "letalidade_violenta"]].drop_duplicates().to_dict(orient="records")
 
     return jsonify({
         "image_url": f"/static/img/{image_name}",
         "data": data_saida
     })
-
+    
 # ===========================
 # API - Features do modelo
 # ===========================
