@@ -113,9 +113,8 @@
                         <!-- Campos do formulário aqui (igual ao que você já tinha) -->
                         <div class="form-field">
                             <label for="cisp">CISP (Código da Delegacia)</label>
-                            <select id="cisp" name="cisp" required>
-                                <option value="" disabled selected>Escolha um CISP</option>
-                            </select>
+                            <input list="lista-cisps" id="cisp" name="cisp" placeholder="Digite ou selecione um CISP" required>
+                            <datalist id="lista-cisps"></datalist>
                         </div>
                         <div class="form-field">
                             <label for="mes">Mês (1-12)</label>
@@ -127,9 +126,8 @@
                         </div>
                         <div class="form-field">
                             <label for="mcirc">MCIRC (Município/Circunscrição)</label>
-                            <select id="mcirc" name="mcirc" required>
-                                <option value="" disabled selected>Escolha um MCIRC</option>
-                            </select>
+                            <input list="lista-mcircs" id="mcirc" name="mcirc" placeholder="Digite ou selecione um MCIRC" required>
+                            <datalist id="lista-mcircs"></datalist>
                         </div>
                         <div class="form-field">
                             <label for="letalidade_violenta">Letalidade Violenta</label>

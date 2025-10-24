@@ -312,25 +312,23 @@ document.addEventListener("DOMContentLoaded", async () => {
             console.log(data);
 
             // Preenche CISP
-            const cispSelect = document.getElementById('cisp');
+            const cispList = document.getElementById('lista-cisps');
             data.cisps.forEach(c => {
                 const option = document.createElement('option');
                 option.value = c;
-                option.textContent = c;
-                cispSelect.appendChild(option);
+                cispList.appendChild(option);
             });
 
             // Preenche MCIRC
-            const mcircSelect = document.getElementById('mcirc');
+            const mcircList = document.getElementById('lista-mcircs');
             data.mcircs.forEach(m => {
                 const option = document.createElement('option');
                 option.value = m;
-                option.textContent = m;
-                mcircSelect.appendChild(option);
+                mcircList.appendChild(option);
             });
 
         } catch (err) {
-            console.error("Erro ao preencher selects:", err);
+            console.error("Erro ao preencher datalists:", err);
         }
     }
 
