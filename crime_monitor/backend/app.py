@@ -1072,47 +1072,61 @@ def map_image(group_by):
 
     # 🔹 Soma letalidade por agrupamento
     df_grouped = df.groupby(group_by)["letalidade_violenta"].sum().reset_index()
-    df_grouped[group_by] = df_grouped[group_by].astype(str)
-    gdf[shapefile_col] = gdf[shapefile_col].astype(str)
-    gdf = gdf.merge(df_grouped, left_on=shapefile_col, right_on=group_by, how="left")
-    gdf["letalidade_violenta"] = gdf["letalidade_violenta"].fillna(0)
 
-    # 🔹 Define colunas de código e nome conforme agrupamento
-    if group_by == "mcirc":
-        nome_col = "NM_MUN"
-        codigo_col = "CD_MUN"
+    if group_by == "cisp":
+        # --- CISP ---
+        cisp_gdf = gpd.read_file(SHAPEFILES["cisp"])
+        if cisp_gdf.crs is None:
+            cisp_gdf = cisp_gdf.set_crs(epsg=4326)
 
-        # Garante que NM_MUN existe
-        if nome_col not in gdf.columns:
-            municipios_ref = gpd.read_file(SHAPEFILES["mcirc"])[["CD_MUN", "NM_MUN"]]
-            municipios_ref["CD_MUN"] = municipios_ref["CD_MUN"].astype(str)
-            gdf = gdf.merge(municipios_ref, on="CD_MUN", how="left")
+        # Converter tipos para merge
+        cisp_gdf['cisp'] = cisp_gdf['cisp'].astype(int)
+        df_grouped['cisp'] = df_grouped['cisp'].astype(int)
 
-    elif group_by == "cisp":
-        nome_col = "NOME_CISP" if "NOME_CISP" in gdf.columns else shapefile_col
-        codigo_col = shapefile_col
+        # Filtrar CISPs dentro do município
+        if municipio:
+            mcirc_gdf = gpd.read_file(SHAPEFILES["mcirc"])[["NM_MUN", "geometry"]]
+            if mcirc_gdf.crs is None:
+                mcirc_gdf = mcirc_gdf.set_crs(epsg=4326)
+            if mcirc_gdf.crs != cisp_gdf.crs:
+                mcirc_gdf = mcirc_gdf.to_crs(cisp_gdf.crs)
 
-    elif group_by == "aisp":
-        nome_col = "NOME_AISP" if "NOME_AISP" in gdf.columns else shapefile_col
-        codigo_col = shapefile_col
+            mcirc_gdf["NM_MUN"] = mcirc_gdf["NM_MUN"].str.strip().str.lower()
+            mun_shape = mcirc_gdf[mcirc_gdf["NM_MUN"] == municipio.strip().lower()]
+            if mun_shape.empty:
+                return jsonify({"error": f"Município '{municipio}' não encontrado"}), 404
 
-    elif group_by == "risp":
-        nome_col = "NOME_RISP" if "NOME_RISP" in gdf.columns else shapefile_col
-        codigo_col = shapefile_col
+            # Mantém apenas CISPs que intersectam o município
+            cisp_gdf = cisp_gdf[cisp_gdf.geometry.intersects(mun_shape.unary_union)]
+
+        # Merge com letalidade
+        gdf = cisp_gdf.merge(df_grouped, left_on="cisp", right_on="cisp", how="left")
+        gdf["letalidade_violenta"] = gdf["letalidade_violenta"].fillna(0)
+        nome_col = "cisp"
+        codigo_col = "cisp"
 
     else:
-        nome_col = shapefile_col
-        codigo_col = shapefile_col
+        # --- Outros agrupamentos (inclusive mcirc) ---
+        df_grouped[group_by] = df_grouped[group_by].astype(str)
+        gdf[shapefile_col] = gdf[shapefile_col].astype(str)
+        gdf = gdf.merge(df_grouped, left_on=shapefile_col, right_on=group_by, how="left")
+        gdf["letalidade_violenta"] = gdf["letalidade_violenta"].fillna(0)
 
-    # 🔹 Cria colunas caso ainda não existam
-    if nome_col not in gdf.columns:
-        gdf[nome_col] = ""
-    if codigo_col not in gdf.columns:
-        gdf[codigo_col] = ""
+        if group_by == "mcirc":
+            nome_col = "NM_MUN"
+            codigo_col = "CD_MUN"
+        else:
+            nome_col = shapefile_col
+            codigo_col = shapefile_col
 
-    # 🔹 Filtra por município, se aplicável
-    if municipio and nome_col in gdf.columns:
-        gdf = gdf[gdf[nome_col] == municipio]
+        # Filtra pelo município
+        if municipio and nome_col in gdf.columns:
+            municipio_lower = municipio.strip().lower()
+            gdf = gdf[gdf[nome_col].str.strip().str.lower() == municipio_lower]
+
+    # 🔹 Verifica se há dados
+    if gdf.empty or gdf.geometry.is_empty.all():
+        return jsonify({"error": f"Nenhum dado encontrado para o município '{municipio}'"}), 404
 
     # 🔹 Gera o mapa
     fig, ax = plt.subplots(1, 1, figsize=(10, 10))
@@ -1124,19 +1138,28 @@ def map_image(group_by):
         edgecolor='0.8',
         legend=True
     )
-    ax.set_axis_off()
-    plt.title("Letalidade Violenta", fontsize=15)
 
-    params_str = f"{group_by}_{inicio}_{fim}_{municipio}".replace(" ", "_").replace(":", "_")
+    # 🔹 Zoom automático se filtrou município
+    if municipio:
+        gdf.boundary.plot(ax=ax, color='black', linewidth=1)
+        minx, miny, maxx, maxy = gdf.total_bounds
+        ax.set_xlim(minx - 0.05, maxx + 0.05)
+        ax.set_ylim(miny - 0.05, maxy + 0.05)
+
+    ax.set_axis_off()
+    plt.title(f"Letalidade Violenta - {municipio or 'RJ'}", fontsize=15)
+
+    # 🔹 Salva a imagem
+    params_str = f"{group_by}_{inicio}_{fim}_{municipio or 'RJ'}".replace(" ", "_").replace(":", "_")
     image_name = f"{params_str}.png"
     image_path = os.path.join(MAP_FOLDER, image_name)
     plt.savefig(image_path, bbox_inches="tight")
     plt.close(fig)
 
-    # 🔹 Normaliza e exporta os dados corretos
+    # 🔹 Retorna dados
     gdf["letalidade_violenta"] = gdf["letalidade_violenta"].fillna(0)
-    gdf[nome_col] = gdf[nome_col].fillna("")
-    gdf[codigo_col] = gdf[codigo_col].fillna("")
+    gdf[nome_col] = gdf.get(nome_col, "").fillna("")
+    gdf[codigo_col] = gdf.get(codigo_col, "").fillna("")
 
     data_saida = gdf[[codigo_col, nome_col, "letalidade_violenta"]].drop_duplicates().to_dict(orient="records")
 
@@ -1144,7 +1167,7 @@ def map_image(group_by):
         "image_url": f"/static/img/{image_name}",
         "data": data_saida
     })
-    
+
 # ===========================
 # API - Features do modelo
 # ===========================
@@ -1431,97 +1454,80 @@ def mapa_clusters():
     group_by = request.args.get("group_by", "mcirc")
     inicio = request.args.get("inicio")
     fim = request.args.get("fim")
+    municipio = request.args.get("municipio")  # <--- filtro adicionado
 
     print(f"Gerando mapa de clusters agrupados por {group_by}...")
+
     shapefile = SHAPEFILES.get(group_by)
     shapefile_col = COLUMN_MAPPING.get(group_by)
     if not shapefile or not shapefile_col:
         return jsonify({"error": "Agrupamento inválido"}), 400
 
-    # carrega shapefile e garante CRS
+    # --- Carrega shapefile ---
     gdf = gpd.read_file(shapefile)
     if gdf.crs is None:
         gdf = gdf.set_crs(epsg=4326)
 
-    # copia apenas os clusters calculados anteriormente
+    # --- Dados de clusters já calculados ---
     df = df_clusters_global.copy()
 
-    # === Filtros de data (para consistência visual) ===
+    # --- Filtros de data ---
     df["data"] = pd.to_datetime(df["ano"].astype(str) + "-" + df["mes"].astype(str) + "-01")
     if inicio:
         df = df[df["data"] >= pd.to_datetime(inicio)]
     if fim:
         df = df[df["data"] <= pd.to_datetime(fim)]
 
-    # === Prepara dados agrupados por região ===
+    # --- Agrupa por região ---
     if group_by not in df.columns:
         return jsonify({"error": f"Coluna '{group_by}' não encontrada nos dados."}), 400
 
     df_grouped = df.groupby(group_by).agg({
-        "cluster": lambda x: x.mode()[0] if not x.mode().empty else -1  # cluster predominante
+        "cluster": lambda x: x.mode()[0] if not x.mode().empty else -1
     }).reset_index()
 
-    # === Merge com shapefile ===
+    # --- Merge com shapefile ---
     gdf[shapefile_col] = gdf[shapefile_col].astype(str)
     df_grouped[group_by] = df_grouped[group_by].astype(str)
     gdf = gdf.merge(df_grouped, left_on=shapefile_col, right_on=group_by, how="left")
     gdf["cluster"] = gdf["cluster"].fillna(-1).astype(int)
 
-    # === Paleta de cores fixa ===
+    # --- Paleta de cores fixa ---
     default_fixed = {
-        0:  "#1f77b4",  # azul forte
-        1:  "#ff7f0e",  # laranja vibrante
-        2:  "#2ca02c",  # verde médio
-        3:  "#d62728",  # vermelho
-        4:  "#9467bd",  # roxo
-        5:  "#8c564b",  # marrom
-        6:  "#e377c2",  # rosa
-        7:  "#17becf",  # ciano
-        8:  "#bcbd22",  # oliva
-        9:  "#7f7f7f",  # cinza neutro
-        10: "#000000",  # preto
-        11: "#ff1493",  # pink neon
-        12: "#228b22",  # verde floresta
-        13: "#ffd700",  # amarelo ouro
-        14: "#00ffff",  # ciano puro
-        15: "#ff4500",  # laranja avermelhado
-        16: "#4169e1",  # azul royal
-        17: "#ff00ff",  # magenta
-        18: "#ff8c00",  # laranja escuro (substitui o verde escuro)
-        19: "#a52a2a",  # marrom escuro
-        20: "#00ff00",  # verde neon
-        21: "#ff6347",  # tomate
-        22: "#40e0d0",  # turquesa
-        23: "#b22222",  # vermelho ferrugem
-        24: "#9932cc",  # roxo violeta
-        25: "#ffa500",  # laranja puro
-        26: "#4682b4",  # azul aço
-        27: "#adff2f",  # verde-limão
-        28: "#dc143c",  # carmesim
-        29: "#00ced1",  # azul-petróleo
-        30: "#8b008b",  # púrpura escuro
-        31: "#ff69b4",  # rosa claro
-        32: "#9acd32",  # verde amarelado
-        33: "#6495ed",  # azul claro
-        34: "#ffb6c1",  # rosa bebê
-        35: "#8b0000",  # vermelho escuro
-        36: "#2f4f4f",  # cinza-azulado escuro
-        -1: "#cccccc"   # neutro
+        0: "#1f77b4", 1: "#ff7f0e", 2: "#2ca02c", 3: "#d62728", 4: "#9467bd",
+        5: "#8c564b", 6: "#e377c2", 7: "#17becf", 8: "#bcbd22", 9: "#7f7f7f",
+        10: "#000000", 11: "#ff1493", 12: "#228b22", 13: "#ffd700", 14: "#00ffff",
+        15: "#ff4500", 16: "#4169e1", 17: "#ff00ff", 18: "#ff8c00", 19: "#a52a2a",
+        20: "#00ff00", 21: "#ff6347", 22: "#40e0d0", 23: "#b22222", 24: "#9932cc",
+        25: "#ffa500", 26: "#4682b4", 27: "#adff2f", 28: "#dc143c", 29: "#00ced1",
+        30: "#8b008b", 31: "#ff69b4", 32: "#9acd32", 33: "#6495ed", 34: "#ffb6c1",
+        35: "#8b0000", 36: "#2f4f4f", -1: "#cccccc"
     }
 
     clusters_in_data = sorted(gdf["cluster"].unique())
-
-    fixed_colors = {}
-    for cluster in clusters_in_data:
-        fixed_colors[cluster] = default_fixed.get(cluster, f"#{np.random.randint(0, 0xFFFFFF):06x}")
-
+    fixed_colors = {c: default_fixed.get(c, f"#{np.random.randint(0, 0xFFFFFF):06x}") for c in clusters_in_data}
     gdf["color"] = gdf["cluster"].map(fixed_colors)
 
-    # === Plot ===
+    # --- 🔹 Identifica colunas de nome de município ---
+    nome_col = None
+    if "NM_MUN" in gdf.columns:
+        nome_col = "NM_MUN"
+    elif "NOME_MUNICIP" in gdf.columns:
+        nome_col = "NOME_MUNICIP"
+    elif "NOME_CISP" in gdf.columns:
+        nome_col = "NOME_CISP"
+
+    # --- 🔹 Filtro de município (se fornecido) ---
+    if municipio and nome_col and municipio in gdf[nome_col].unique():
+        gdf = gdf[gdf[nome_col] == municipio]
+
+    # --- 🔹 Plot do mapa ---
     fig, ax = plt.subplots(1, 1, figsize=(10, 10))
     gdf.plot(color=gdf["color"], linewidth=0.8, edgecolor='0.8', ax=ax)
     ax.set_axis_off()
-    plt.title("Mapa de Clusters de Criminalidade", fontsize=15)
+
+    titulo = f"Clusters de Criminalidade - {municipio}" if municipio else "Clusters de Criminalidade - RJ"
+    plt.title(titulo, fontsize=15)
 
     legend_elements = [
         Patch(facecolor=fixed_colors[i], edgecolor='0.8', label=f"Cluster {i}" if i >= 0 else "Sem dados")
@@ -1529,15 +1535,19 @@ def mapa_clusters():
     ]
     ax.legend(handles=legend_elements, title="Clusters", loc="lower left")
 
-    # nome do arquivo baseado nos filtros
-    params_str = f"clusters_{group_by}_{inicio}_{fim}".replace(" ", "_").replace(":", "_")
+    # --- 🔹 Salva imagem ---
+    params_str = f"clusters_{group_by}_{inicio}_{fim}_{municipio or 'RJ'}".replace(" ", "_").replace(":", "_")
     image_name = f"{params_str}.png"
     image_path = os.path.join(MAP_FOLDER, image_name)
 
     plt.savefig(image_path, bbox_inches="tight")
     plt.close(fig)
 
-    return jsonify({"mapa_clusters": f"/static/img/{image_name}", "data": gdf[[shapefile_col, "cluster"]].to_dict(orient="records")})
+    # --- Retorna JSON ---
+    return jsonify({
+        "mapa_clusters": f"/static/img/{image_name}",
+        "data": gdf[[shapefile_col, "cluster"]].to_dict(orient="records")
+    })
 
 @app.route("/api/predizer_cluster", methods=["POST"])
 def predizer_cluster():
