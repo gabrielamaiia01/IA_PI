@@ -1077,42 +1077,27 @@ def map_image(group_by):
     gdf = gdf.merge(df_grouped, left_on=shapefile_col, right_on=group_by, how="left")
     gdf["letalidade_violenta"] = gdf["letalidade_violenta"].fillna(0)
 
-    # 🔹 Define colunas de código e nome conforme agrupamento
-    if group_by == "mcirc":
-        nome_col = "NM_MUN"
-        codigo_col = "CD_MUN"
+    # 🔹 Caso o filtro seja por município
+    if municipio:
+        municipios_gdf = gpd.read_file(SHAPEFILES["mcirc"])
+        if municipios_gdf.crs is None:
+            municipios_gdf = municipios_gdf.set_crs(epsg=4326)
 
-        # Garante que NM_MUN existe
-        if nome_col not in gdf.columns:
-            municipios_ref = gpd.read_file(SHAPEFILES["mcirc"])[["CD_MUN", "NM_MUN"]]
-            municipios_ref["CD_MUN"] = municipios_ref["CD_MUN"].astype(str)
-            gdf = gdf.merge(municipios_ref, on="CD_MUN", how="left")
+        # Garante mesmo CRS
+        municipios_gdf = municipios_gdf.to_crs(gdf.crs)
 
-    elif group_by == "cisp":
-        nome_col = "NOME_CISP" if "NOME_CISP" in gdf.columns else shapefile_col
-        codigo_col = shapefile_col
+        # Seleciona o polígono do município desejado
+        municipio_geom = municipios_gdf.loc[municipios_gdf["NM_MUN"] == municipio, "geometry"]
+        if not municipio_geom.empty:
+            municipio_geom = municipio_geom.iloc[0]
 
-    elif group_by == "aisp":
-        nome_col = "NOME_AISP" if "NOME_AISP" in gdf.columns else shapefile_col
-        codigo_col = shapefile_col
+            # 🔹 Recorta o shapefile das CISPs apenas dentro do município
+            gdf = gpd.clip(gdf, municipio_geom)
 
-    elif group_by == "risp":
-        nome_col = "NOME_RISP" if "NOME_RISP" in gdf.columns else shapefile_col
-        codigo_col = shapefile_col
-
-    else:
-        nome_col = shapefile_col
-        codigo_col = shapefile_col
-
-    # 🔹 Cria colunas caso ainda não existam
-    if nome_col not in gdf.columns:
-        gdf[nome_col] = ""
-    if codigo_col not in gdf.columns:
-        gdf[codigo_col] = ""
-
-    # 🔹 Filtra por município, se aplicável
-    if municipio and nome_col in gdf.columns:
-        gdf = gdf[gdf[nome_col] == municipio]
+            # Atribui nome do município
+            gdf["NM_MUN"] = municipio
+        else:
+            return jsonify({"error": f"Município '{municipio}' não encontrado no shapefile"}), 404
 
     # 🔹 Gera o mapa
     fig, ax = plt.subplots(1, 1, figsize=(10, 10))
@@ -1133,18 +1118,18 @@ def map_image(group_by):
     plt.savefig(image_path, bbox_inches="tight")
     plt.close(fig)
 
-    # 🔹 Normaliza e exporta os dados corretos
+    # 🔹 Prepara os dados para JSON
     gdf["letalidade_violenta"] = gdf["letalidade_violenta"].fillna(0)
-    gdf[nome_col] = gdf[nome_col].fillna("")
-    gdf[codigo_col] = gdf[codigo_col].fillna("")
+    gdf["NM_MUN"] = gdf.get("NM_MUN", "")
+    gdf[shapefile_col] = gdf[shapefile_col].fillna("")
 
-    data_saida = gdf[[codigo_col, nome_col, "letalidade_violenta"]].drop_duplicates().to_dict(orient="records")
+    data_saida = gdf[[shapefile_col, "NM_MUN", "letalidade_violenta"]].drop_duplicates().to_dict(orient="records")
 
     return jsonify({
         "image_url": f"/static/img/{image_name}",
         "data": data_saida
     })
-    
+
 # ===========================
 # API - Features do modelo
 # ===========================
@@ -1506,7 +1491,7 @@ def mapa_clusters():
         34: "#ffb6c1",  # rosa bebê
         35: "#8b0000",  # vermelho escuro
         36: "#2f4f4f",  # cinza-azulado escuro
-        -1: "#aaaaaa"   # neutro
+        -1: "#cccccc"   # neutro
     }
 
     clusters_in_data = sorted(gdf["cluster"].unique())
