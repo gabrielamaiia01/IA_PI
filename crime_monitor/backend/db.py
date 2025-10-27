@@ -1,4 +1,5 @@
 import psycopg2
+import os
 import pandas as pd
 from dotenv import load_dotenv
 
@@ -11,6 +12,17 @@ DB_PASSWORD = os.getenv("DB_PASSWORD")
 DB_HOST = os.getenv("DB_HOST")
 DB_PORT = os.getenv("DB_PORT")
 
+
+def get_connection():
+    """Retorna uma conexão com o banco de dados PostgreSQL"""
+    conn = psycopg2.connect(
+        dbname=DB_NAME,
+        user=DB_USER,
+        password=DB_PASSWORD,
+        host=DB_HOST,
+        port=DB_PORT
+    )
+    return conn
 # === 2. Conexão ao banco ===
 conn = psycopg2.connect(
     dbname=DB_NAME,

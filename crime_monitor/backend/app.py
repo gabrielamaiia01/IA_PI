@@ -1,4 +1,8 @@
-from flask import Flask, render_template, jsonify, request, request, send_file
+from flask import Flask, render_template, jsonify, request, request, send_file, session, flash, redirect, url_for
+from captcha_dl_gen import generate_captcha
+from captcha.image import ImageCaptcha
+import random
+import string
 import pandas as pd
 import numpy as np
 import os
@@ -21,14 +25,17 @@ from dotenv import load_dotenv
 import random
 import colorsys
 # -*- coding: utf-8 -*-
-import io
+import io 
+from io import BytesIO
+import base64
 import tempfile
 import requests
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.pagesizes import A4
 import json
-app = Flask(__name__)
+
+
 import re
 
 # ----------------------------
@@ -44,7 +51,13 @@ if speedups.available:
 
 # === 1. Carregar variáveis do arquivo .env ===
 load_dotenv()
+app = Flask(
+    __name__,
+    static_folder='../frontend/static',
+    template_folder='../frontend/pages'
+)
 
+app.secret_key = os.getenv("FLASK_SECRET_KEY")
 DB_NAME = os.getenv("DB_NAME")
 DB_USER = os.getenv("DB_USER")
 DB_PASSWORD = os.getenv("DB_PASSWORD")
@@ -53,16 +66,12 @@ DB_PORT = os.getenv("DB_PORT")
 OPENROUTER_API_KEY= os.getenv("OPENROUTER_API_KEY")
 IP_OR_HOST= os.getenv("IP_OR_HOST")
 
-app = Flask(
-    __name__,
-    static_folder='../frontend/static',
-    template_folder='../frontend/pages'
-)
 
 # ===========================
 # Paths e configurações
 # ===========================
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+print(f"Base directory: {BASE_DIR}")
 DATA_PATH = os.path.join(BASE_DIR, 'data', 'BaseDPEvolucaoMensalCisp.csv')
 MODEL_PATH = os.path.join(BASE_DIR, 'models', 'model.pkl')
 
@@ -802,6 +811,18 @@ def criar_graficos_temp_agrupamentos(payload, tmp_dir, group_by):
         print(f"[ERRO mapa clusters]: {e}")
 
     return saved
+
+
+@app.route('/captcha')
+def captcha():
+    from captcha.image import ImageCaptcha
+    captcha_text = ''.join(random.choices(string.ascii_uppercase + string.digits, k=4))
+    session['captcha_text'] = captcha_text  # salva no session para validação
+
+    image = ImageCaptcha()
+    data = image.generate(captcha_text)
+    return send_file(data, mimetype='image/png')
+
 
 # ===========================
 # Rotas de páginas
@@ -1710,6 +1731,46 @@ def export_agrupamentos_pdf():
     except Exception as e:
         print(f"[ERRO PDF AGRUPAMENTOS] {e}")
         return jsonify({"erro":"Falha ao gerar PDF"}), 500
+
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
+        user_captcha = request.form.get('captcha', '').upper()  # pega captcha digitado
+
+        # validação do captcha
+        if user_captcha != session.get('captcha_text', ''):
+            flash("Captcha incorreto!")
+            return redirect(url_for('login'))
+
+        
+        # Conectar ao banco de dados
+        conn = psycopg2.connect(
+                dbname=DB_NAME,
+                user=DB_USER,
+                password=DB_PASSWORD,
+                host=DB_HOST,
+                port=DB_PORT
+            )
+        from db import get_connection
+
+        conn = get_connection()
+        cur = conn.cursor()
+        # validação do usuário no banco
+        cur.execute("SELECT * FROM users WHERE username=%s AND password=%s", (username, password))
+        user = cur.fetchone()
+        if not user:
+            flash("Usuário ou senha incorretos!")
+            return redirect(url_for('login'))
+
+        # login bem-sucedido
+        session['user_id'] = user[0]
+        flash("Login realizado com sucesso!")
+        return redirect(url_for('index'))
+
+    return render_template('login.html')
 
 # ===========================
 # Main
