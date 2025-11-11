@@ -282,11 +282,10 @@ body {
     margin-bottom: 20px;
 }
 
-.charts-header {
-    display: flex;
-    align-items: center;
+.prediction-controls h2 {
+    font-size: 22px;
+    color: #333;
     margin-bottom: 20px;
-    gap: 10px;
 }
 
 .btn-export-pdf {
@@ -842,4 +841,41 @@ input:disabled {
     padding: 12px;
     border-radius: 4px;
     margin-top: 10px;
+}
+
+.charts-header {
+    display: flex;
+    align-items: center;      /* Alinha verticalmente no centro */
+    justify-content: flex-start;  /* Mantém o título à esquerda */
+    gap: 12px;                /* Espaço entre o título e o botão */
+    margin-bottom: 20px;
+}
+
+.charts-header h2 {
+    margin: 0;
+    font-size: 22px;
+    color: #333;
+    line-height: 1.2;         /* Garante que o texto fique bem alinhado */
+}
+
+.charts-header .btn-export-pdf {
+    background: linear-gradient(135deg, #0077b6, #00b4d8);
+    border: none;
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;      /* Centraliza o ícone verticalmente */
+    justify-content: center;  /* Centraliza o ícone horizontalmente */
+    color: #fff;
+    cursor: pointer;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+    transition: all 0.3s ease;
+    flex-shrink: 0;
+}
+
+.charts-header .btn-export-pdf:hover {
+    background: linear-gradient(135deg, #00b4d8, #90e0ef);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 12px rgba(0,0,0,0.2);
 }

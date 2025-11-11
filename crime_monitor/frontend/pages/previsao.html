@@ -4,104 +4,136 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Monitor RJ - Previsão</title>
-    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
 </head>
+
 <body>
     <div class="container">
+        <!-- Barra lateral -->
         <aside class="sidebar">
             <div class="logo">Monitor RJ</div>
             <nav>
                 <ul>
-                    <li><a href="/">Dashboard</a></li>
-                    <li class="active"><a href="/previsao">Previsão</a></li>
-                    <li><a href="/agrupamentos">Agrupamentos</a></li>
+                    <li><a href="{{ url_for('index') }}">Dashboard</a></li>
+                    <li class="active"><a href="{{ url_for('previsao') }}">Previsão</a></li>
+                    <li><a href="{{ url_for('agrupamentos') }}">Agrupamentos</a></li>
                 </ul>
             </nav>
         </aside>
 
+        <!-- Conteúdo principal -->
         <main class="main-content">
             <header class="header">
                 <h1>Monitor de Letalidade Violenta - RJ</h1>
                 <span class="updated-date">Atualizado: Ago/2025</span>
             </header>
 
+            <!-- Seção de previsão -->
             <section class="prediction-controls">
-                <h2>Previsão com Modelo LightGBM</h2>
-                <p style="color: #666; margin-bottom: 20px;">Preencha as variáveis abaixo para gerar uma previsão de letalidade violenta.</p>
+                <div class="charts-header">
+                    <h2>Previsão com Modelo LightGBM</h2>
+                    <button type="button" id="btn-export-previsao" class="btn-export-pdf" title="Exportar gráficos em PDF">
+                        <i class="bi bi-download"></i>
+                    </button>
+                </div>
+
+                <p class="description-text">Preencha as variáveis abaixo para gerar uma previsão de letalidade violenta.</p>
                 
                 <form id="prediction-form">
                     <div class="form-grid">
-                        <!-- Campos do formulário aqui (igual ao que você já tinha) -->
+                        <!-- CISP -->
                         <div class="form-field">
                             <label for="cisp">CISP (Código da Delegacia)</label>
                             <input list="lista-cisps" id="cisp" name="cisp" placeholder="Digite ou selecione um CISP" required>
                             <datalist id="lista-cisps"></datalist>
                         </div>
+
+                        <!-- Mês -->
                         <div class="form-field">
                             <label for="mes">Mês (1-12)</label>
                             <input type="number" id="mes" name="mes" min="1" max="12" placeholder="Ex: 8" required>
                         </div>
+
+                        <!-- Ano -->
                         <div class="form-field">
                             <label for="ano">Ano</label>
                             <input type="number" id="ano" name="ano" placeholder="Ex: 2025" required>
                         </div>
+
+                        <!-- MCIRC -->
                         <div class="form-field">
                             <label for="mcirc">MCIRC (Município/Circunscrição)</label>
                             <input list="lista-mcircs" id="mcirc" name="mcirc" placeholder="Digite ou selecione um MCIRC" required>
                             <datalist id="lista-mcircs"></datalist>
                         </div>
+
+                        <!-- Outros campos -->
                         <div class="form-field">
                             <label for="tentat_hom">Tentativa de Homicídio</label>
                             <input type="number" id="tentat_hom" name="tentat_hom" placeholder="Ex: 15" required>
                         </div>
+
                         <div class="form-field">
                             <label for="estupro">Estupro</label>
-                            <input type="number" id="estupro" name="estupro"  value="8" disabled>
+                            <input type="number" id="estupro" name="estupro" value="8" disabled>
                         </div>
+
                         <div class="form-field">
                             <label for="lesao_corp_culposa">Lesão Corporal Culposa</label>
                             <input type="number" id="lesao_corp_culposa" name="lesao_corp_culposa" placeholder="Ex: 25" required>
                         </div>
+
                         <div class="form-field">
                             <label for="roubo_veiculo">Roubo de Veículo</label>
                             <input type="number" id="roubo_veiculo" name="roubo_veiculo" placeholder="Ex: 120" required>
                         </div>
+
                         <div class="form-field">
                             <label for="estelionato">Estelionato</label>
-                            <input type="number" id="estelionato" name="estelionato"  value="45" disabled>
+                            <input type="number" id="estelionato" name="estelionato" value="45" disabled>
                         </div>
+
                         <div class="form-field">
                             <label for="apreensao_drogas">Apreensão de Drogas</label>
-                            <input type="number" id="apreensao_drogas" name="apreensao_drogas"  value="50" disabled>
+                            <input type="number" id="apreensao_drogas" name="apreensao_drogas" value="50" disabled>
                         </div>
+
                         <div class="form-field">
                             <label for="trafico_drogas">Tráfico de Drogas</label>
-                            <input type="number" id="trafico_drogas" name="trafico_drogas"  value="50" disabled>
+                            <input type="number" id="trafico_drogas" name="trafico_drogas" value="50" disabled>
                         </div>
+
                         <div class="form-field">
                             <label for="apf">APF (Apreensão de Arma de Fogo)</label>
-                            <input type="number" id="apf" name="apf"  value="12" disabled>
+                            <input type="number" id="apf" name="apf" value="12" disabled>
                         </div>
+
                         <div class="form-field">
                             <label for="pessoas_desaparecidas">Pessoas Desaparecidas</label>
-                            <input type="number" id="pessoas_desaparecidas" name="pessoas_desaparecidas"  value="5" disabled>
+                            <input type="number" id="pessoas_desaparecidas" name="pessoas_desaparecidas" value="5" disabled>
                         </div>
+
                         <div class="form-field">
                             <label for="encontro_cadaver">Encontro de Cadáver</label>
-                            <input type="number" id="encontro_cadaver" name="encontro_cadaver"  value="2" disabled>
+                            <input type="number" id="encontro_cadaver" name="encontro_cadaver" value="2" disabled>
                         </div>
+
                         <div class="form-field">
                             <label for="registro_ocorrencias">Registro de Ocorrências</label>
                             <input type="number" id="registro_ocorrencias" name="registro_ocorrencias" placeholder="Ex: 850" required>
                         </div>
                     </div>
-                    
+
                     <button type="submit" class="generate-button" id="generate-btn">Gerar Previsão</button>
-                    <div class="loading" id="loading">Processando previsão...</div>
-                    <div class="error-message" id="error-message"></div>
-                    <div class="success-message" id="success-message">Previsão gerada com sucesso!</div>
+
+                    <div class="loading" id="loading" hidden>Processando previsão...</div>
+                    <div class="error-message" id="error-message" hidden></div>
+                    <div class="success-message" id="success-message" hidden>Previsão gerada com sucesso!</div>
                 </form>
             </section>
+
+            <!-- Gráfico -->
             <section class="prediction-charts">
                 <div class="chart-card full-width">
                     <h3>Histórico + Previsão</h3>
@@ -111,20 +143,25 @@
                 </div>
             </section>
 
+            <!-- Detalhes da previsão -->
             <section class="prediction-details">
                 <div class="details-summary">
                     <div class="summary-header">
                         <h3>Detalhes da Previsão</h3>
                         <span class="tab active">Resumo</span>
                     </div>
+
                     <div class="summary-content">
                         <div class="kpi-card">
                             <h3>Letalidade violenta prevista</h3>
                             <p class="value" id="previsao_leitura">-</p>
                             <p class="description">Com base no modelo LightGBM</p>
                         </div>
+
                         <div class="highlight-box">
-                            <p id="drivers_principais">Preencha o formulário acima e clique em "Gerar Previsão" para obter resultados.</p>
+                            <p id="drivers_principais">
+                                Preencha o formulário acima e clique em "Gerar Previsão" para obter resultados.
+                            </p>
                         </div>
                     </div>
                 </div>
@@ -135,21 +172,23 @@
                         <span class="tab active">Barras</span>
                     </div>
                     <div class="factors-content">
-                        <!-- Container da tabela de importância corrigido -->
                         <div id="contribuicaoContainer"></div>
                     </div>
                 </div>
             </section>
 
+            <!-- Indicadores -->
             <section class="prediction-kpis">
                 <div class="kpi-card">
                     <h3>Risco</h3>
                     <p class="value" id="risco">-</p>
                 </div>
+
                 <div class="kpi-card">
                     <h3>Intervalo 95%</h3>
                     <p class="value" id="intervalo_95">-</p>
                 </div>
+
                 <div class="kpi-card">
                     <h3>Tendência</h3>
                     <p class="value" id="tendencia">-</p>
@@ -158,7 +197,8 @@
         </main>
     </div>
 
+    <!-- Scripts -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="/static/js/previsao.js"></script>
+    <script src="{{ url_for('static', filename='js/previsao.js') }}"></script>
 </body>
 </html>

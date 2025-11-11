@@ -43,3 +43,9 @@ CREATE TABLE IF NOT EXISTS dados_reais
     registro_ocorrencias integer,
     CONSTRAINT dados_reais_pkey PRIMARY KEY (real_id)
 );
+
+CREATE TABLE IF NOT EXISTS users
+(
+    email varchar(100) NOT NULL,
+    senha varchar(15) NOT NULL
+);

@@ -1,4 +1,6 @@
-from flask import Flask, render_template, jsonify, request, request, send_file
+from flask import Flask, render_template, jsonify, request, request, send_file, session, flash, redirect, url_for
+import random
+import string
 import pandas as pd
 import numpy as np
 import os
@@ -21,14 +23,18 @@ from dotenv import load_dotenv
 import random
 import colorsys
 # -*- coding: utf-8 -*-
-import io
+import io 
 import tempfile
 import requests
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image
+from reportlab.platypus import (SimpleDocTemplate, Paragraph, Spacer, Image,
+                                PageBreak, Table, TableStyle)
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.pagesizes import A4
+from reportlab.lib import colors
+
 import json
-app = Flask(__name__)
+
+
 import re
 
 # ----------------------------
@@ -44,7 +50,13 @@ if speedups.available:
 
 # === 1. Carregar variáveis do arquivo .env ===
 load_dotenv()
+app = Flask(
+    __name__,
+    static_folder='../frontend/static',
+    template_folder='../frontend/pages'
+)
 
+app.secret_key = os.getenv("FLASK_SECRET_KEY")
 DB_NAME = os.getenv("DB_NAME")
 DB_USER = os.getenv("DB_USER")
 DB_PASSWORD = os.getenv("DB_PASSWORD")
@@ -53,16 +65,12 @@ DB_PORT = os.getenv("DB_PORT")
 OPENROUTER_API_KEY= os.getenv("OPENROUTER_API_KEY")
 IP_OR_HOST= os.getenv("IP_OR_HOST")
 
-app = Flask(
-    __name__,
-    static_folder='../frontend/static',
-    template_folder='../frontend/pages'
-)
 
 # ===========================
 # Paths e configurações
 # ===========================
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+print(f"Base directory: {BASE_DIR}")
 DATA_PATH = os.path.join(BASE_DIR, 'data', 'BaseDPEvolucaoMensalCisp.csv')
 MODEL_PATH = os.path.join(BASE_DIR, 'models', 'model.pkl')
 
@@ -322,7 +330,7 @@ def generate_distinct_colors(k, fixed_colors=None):
 
 # Caminho local do modelo Mistral-7B-Instruct-v0.3
 # CORREÇÃO 2: Função de geração com fallback
-def gerar_texto_llama3(prompt, max_tokens=800, temperature=0.7, retries=2, wait=3):
+def gerar_texto_gpt4o(prompt, max_tokens=800, temperature=0.7, retries=2, wait=3):
     """
     Gera texto com o modelo LLaMA 3 (meta-llama/llama-3-8b-instruct) via OpenRouter.
     Permite retries em caso de falha temporária.
@@ -343,7 +351,7 @@ def gerar_texto_llama3(prompt, max_tokens=800, temperature=0.7, retries=2, wait=
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
     }
     data = {
-        "model": "meta-llama/llama-3.3-8b-instruct:free",
+        "model": "openai/gpt-4o-mini",
         "messages": [{"role": "user", "content": prompt}],
         "temperature": temperature,
         "max_tokens": max_tokens,
@@ -411,7 +419,7 @@ Analise os seguintes dados de evolução temporal e produza uma resposta curta (
 [EVOLUÇÃO TEMPORAL]
 {resumo_evo}
 """
-    descricoes["linha_evolucao"] = gerar_texto_llama3(prompt_evo)
+    descricoes["linha_evolucao"] = gerar_texto_gpt4o(prompt_evo)
 
     # ================== CORRELAÇÃO ENTRE CRIMES ==================
     corr = payload.get("correlacao_crimes", {})
@@ -423,7 +431,7 @@ Analise os seguintes dados de correlação entre a variável letalidade e os cri
 [CORRELAÇÃO ENTRE CRIMES]
 {resumo_corr}
 """
-    descricoes["barras_correlacao"] = gerar_texto_llama3(prompt_corr)
+    descricoes["barras_correlacao"] = gerar_texto_gpt4o(prompt_corr)
 
     # ================== SCATTER ==================
     scatter = payload.get("scatter_data", [])
@@ -445,7 +453,7 @@ Analise os dados de dispersão e produza uma resposta curta (2-3 frases) em port
 [DISPERSÃO ROUBO x LETALIDADE]
 {resumo_scatter}
 """
-    descricoes["scatter"] = gerar_texto_llama3(prompt_scatter)
+    descricoes["scatter"] = gerar_texto_gpt4o(prompt_scatter)
 
     # ================== MAPA TEMÁTICO ==================
     map_data = {}
@@ -466,8 +474,8 @@ Analise os dados de dispersão e produza uma resposta curta (2-3 frases) em port
 
     if map_data.get("data"):
         texto_map = f"Letalidade violenta por {group_label}:\n" + "\n".join([
-            f"• {item.get('NM_MUN', item.get(group_by, 'Desconhecido'))}"
-            f" - {int(item.get('letalidade_violenta', 0))}"
+            f"• {item.get('NM_MUN', item.get(group_by, 'Desconhecido'))} "
+            f"({item.get('CD_MUN', '-')}) — {int(item.get('letalidade_violenta', 0))}"
             for item in map_data["data"]
             if item.get('letalidade_violenta', 0) > 0
         ])
@@ -475,20 +483,15 @@ Analise os dados de dispersão e produza uma resposta curta (2-3 frases) em port
     else:
         resumo_mapa = f"Dados de mapa por {group_label} não disponíveis."
 
-    top_municipios = sorted(map_data["data"], key=lambda x: x.get("letalidade_violenta", 0), reverse=True)[:5]
-    top_names = [item["NM_MUN"] for item in top_municipios]
-    top_list = ", ".join(top_names)
-
     prompt_mapa = f"""
 Você é um analista de segurança pública.
-Analise os dados do mapa temático, considerando que os municípios com maior letalidade violenta são: {top_list}.
-Produza uma resposta curta (2-3 frases) em português com base nisso.
+Analise os dados do mapa temático e produza uma resposta curta (2-3 frases) em português:
 
 [MAPA TEMÁTICO]
 {resumo_mapa}
 """
     print(prompt_mapa)
-    descricoes["mapa"] = gerar_texto_llama3(prompt_mapa)
+    descricoes["mapa"] = gerar_texto_gpt4o(prompt_mapa)
 
     return descricoes
 
@@ -631,7 +634,7 @@ Analise os seguintes dados de PCA e produza uma resposta curta (2-3 frases) em p
 [DISPERSÃO PCA]
 {resumo_scatter}
 """
-        descricoes["scatter_pca"] = gerar_texto_llama3(prompt_scatter)
+        descricoes["scatter_pca"] = gerar_texto_gpt4o(prompt_scatter)
 
         # =====================
         # PERFIL MÉDIO DOS CLUSTERS
@@ -651,7 +654,7 @@ Analise os dados de perfil médio dos clusters e produza uma resposta curta (2-3
 [PERFIL MÉDIO DOS CLUSTERS]
 {resumo_perfil}
 """
-        descricoes["perfil_medio_clusters"] = gerar_texto_llama3(prompt_perfil)
+        descricoes["perfil_medio_clusters"] = gerar_texto_gpt4o(prompt_perfil)
 
         # =====================
         # IMPORTÂNCIA DAS VARIÁVEIS
@@ -669,7 +672,7 @@ Analise as importâncias das variáveis e produza uma resposta curta (2-3 frases
 [IMPORTÂNCIA DAS VARIÁVEIS]
 {resumo_importancias}
 """
-        descricoes["importancia_variaveis"] = gerar_texto_llama3(prompt_importancia)
+        descricoes["importancia_variaveis"] = gerar_texto_gpt4o(prompt_importancia)
 
         # =====================
         # MAPA DOS CLUSTERS
@@ -706,7 +709,7 @@ Analise os dados do mapa dos clusters e produza uma resposta curta (2-3 frases) 
 [MAPA DOS CLUSTERS]
 {resumo_mapa}
 """
-        descricoes["mapa_clusters"] = gerar_texto_llama3(prompt_mapa)
+        descricoes["mapa_clusters"] = gerar_texto_gpt4o(prompt_mapa)
 
         return descricoes
 
@@ -807,6 +810,18 @@ def criar_graficos_temp_agrupamentos(payload, tmp_dir, group_by):
         print(f"[ERRO mapa clusters]: {e}")
 
     return saved
+
+
+@app.route('/captcha')
+def captcha():
+    from captcha.image import ImageCaptcha
+    captcha_text = ''.join(random.choices(string.ascii_uppercase + string.digits, k=4))
+    session['captcha_text'] = captcha_text  # salva no session para validação
+
+    image = ImageCaptcha()
+    data = image.generate(captcha_text)
+    return send_file(data, mimetype='image/png')
+
 
 # ===========================
 # Rotas de páginas
@@ -1496,7 +1511,7 @@ def mapa_clusters():
         34: "#ffb6c1",  # rosa bebê
         35: "#8b0000",  # vermelho escuro
         36: "#2f4f4f",  # cinza-azulado escuro
-        -1: "#aaaaaa"   # neutro
+        -1: "#cccccc"   # neutro
     }
 
     clusters_in_data = sorted(gdf["cluster"].unique())
@@ -1710,12 +1725,368 @@ def export_agrupamentos_pdf():
 
             doc.build(story)
             buffer.seek(0)
-            nome_pdf = f"relatorio_agrupamentos_{params.get('inicio','sem_data')}.pdf"
+            nome_pdf = f"relatorio_agrupamentos.pdf"
             return send_file(buffer, as_attachment=True, download_name=nome_pdf, mimetype="application/pdf")
     except Exception as e:
         print(f"[ERRO PDF AGRUPAMENTOS] {e}")
         return jsonify({"erro":"Falha ao gerar PDF"}), 500
 
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
+        user_captcha = request.form.get('captcha', '').upper()  # pega captcha digitado
+
+        # validação do captcha
+        if user_captcha != session.get('captcha_text', ''):
+            flash("Captcha incorreto!")
+            return redirect(url_for('login'))
+
+        
+        # Conectar ao banco de dados
+        conn = psycopg2.connect(
+                dbname=DB_NAME,
+                user=DB_USER,
+                password=DB_PASSWORD,
+                host=DB_HOST,
+                port=DB_PORT
+            )
+        from db import get_connection
+
+        conn = get_connection()
+        cur = conn.cursor()
+        # validação do usuário no banco
+        cur.execute("SELECT * FROM users WHERE username=%s AND password=%s", (username, password))
+        user = cur.fetchone()
+        if not user:
+            flash("Usuário ou senha incorretos!")
+            return redirect(url_for('login'))
+
+        # login bem-sucedido
+        session['user_id'] = user[0]
+        flash("Login realizado com sucesso!")
+        return redirect(url_for('index'))
+
+    return render_template('login.html')
+
+def gerar_descricoes_previsao(payload):
+    """
+    Gera descrições automáticas para a página de previsão.
+    Agora o prompt de soma e média foi unificado.
+    """
+    descricoes = {
+        "historico": "Análise não disponível.",
+        "feature_importance": "Análise não disponível.",
+        "intervalo_confianca": "Análise não disponível.",
+        "soma_media_comparacao": "Análise não disponível."
+    }
+
+    try:
+        # =====================
+        # HISTÓRICO E PREVISÃO
+        # =====================
+        previsao = payload.get("previsao_leitura", 0)
+        intervalo = payload.get("intervalo_95", [0, 0])
+        tendencia = payload.get("tendencia", "Indefinida")
+        risco = payload.get("risco", "Baixo")
+        drivers = payload.get("drivers", "Nenhum driver identificado")
+
+        resumo_historico = f"""
+        Previsão: {previsao} casos de letalidade violenta.
+        Intervalo de confiança (95%): [{intervalo[0]:.1f}, {intervalo[1]:.1f}]
+        Tendência: {tendencia}
+        Nível de risco: {risco}
+        Principais drivers: {drivers}
+        """
+
+        prompt_historico = f"""
+Você é um analista de segurança pública.
+Analise a seguinte previsão de criminalidade e produza uma resposta curta (3-4 frases) em português:
+
+[PREVISÃO DE CRIMINALIDADE]
+{resumo_historico}
+"""
+        descricoes["historico"] = gerar_texto_gpt4o(prompt_historico)
+
+        # =====================
+        # IMPORTÂNCIA DAS FEATURES
+        # =====================
+        feature_importance = payload.get("feature_importance", {})
+        top_features = sorted(feature_importance.items(), key=lambda x: x[1], reverse=True)[:5]
+        resumo_features = ", ".join([f"{k.replace('_', ' ')} ({v:.3f})" for k, v in top_features])
+
+        prompt_features = f"""
+Você é um analista de segurança pública.
+Analise as principais variáveis que influenciam a previsão e produza uma resposta curta (2-3 frases) em português:
+
+[IMPORTÂNCIA DAS VARIÁVEIS]
+{resumo_features}
+"""
+        descricoes["feature_importance"] = gerar_texto_gpt4o(prompt_features)
+
+        # =====================
+        # INTERVALO DE CONFIANÇA
+        # =====================
+        lower, upper = intervalo
+        amplitude = upper - lower
+        resumo_intervalo = f"Intervalo: [{lower:.1f}, {upper:.1f}], amplitude: {amplitude:.1f}"
+
+        prompt_intervalo = f"""
+Você é um analista de segurança pública.
+Analise o intervalo de confiança da previsão e produza uma resposta curta (2-3 frases) em português:
+
+[INTERVALO DE CONFIANÇA]
+{resumo_intervalo}
+"""
+        descricoes["intervalo_confianca"] = gerar_texto_gpt4o(prompt_intervalo)
+
+        # =====================
+        # COMPARAÇÃO UNIFICADA (SOMA + MÉDIA)
+        # =====================
+        soma_hist = sum(payload.get("historico_valores", []))
+        soma_prev = sum(payload.get("prev_valores", []))
+        media_hist = np.mean(payload.get("historico_valores", [])) if payload.get("historico_valores") else 0
+        media_prev = np.mean(payload.get("prev_valores", [])) if payload.get("prev_valores") else 0
+
+        prompt_soma_media = f"""
+Você é um analista de segurança pública.
+Compare o comportamento da letalidade violenta entre o histórico e as previsões,
+considerando tanto a soma total quanto a média mensal dos casos.
+Explique brevemente se há tendência de aumento, estabilidade ou redução,
+e interprete o que isso pode significar para o cenário de segurança.
+
+[SOMA E MÉDIA]
+Soma - Histórico: {soma_hist:.1f} | Previsões: {soma_prev:.1f}
+Média - Histórico: {media_hist:.1f} | Previsões: {media_prev:.1f}
+"""
+        descricoes["soma_media_comparacao"] = gerar_texto_gpt4o(prompt_soma_media)
+
+        return descricoes
+
+    except Exception as e:
+        print(f"Erro ao gerar descrições de previsão: {e}")
+        return descricoes
+
+def criar_graficos_temp_previsao(payload, tmp_dir):
+    """
+    Cria dois gráficos:
+      1. Histórico vs Previsões (Soma e Média ao longo do tempo)
+      2. Contribuição por Fator (importância das variáveis)
+    """
+    saved = {}
+
+    historico = payload.get("historico_valores", [])
+    previsoes = payload.get("prev_valores", [])
+    media_hist = payload.get("media_historica_valores", [])
+    media_prev = payload.get("media_previsoes_valores", [])
+    labels_hist = payload.get("historico_labels", [])
+    feature_importance = payload.get("feature_importance", {})
+
+    print("historicos_valores: ", historico)
+    print("prev_valores: ", previsoes)
+    print("media_hist: ", media_hist)
+    print("media_prev: ", media_prev)
+    print("labels_hist: ", labels_hist)
+
+    # ===============================
+    # 1️⃣ Gráfico: Histórico vs Previsões — Soma e Média
+    # ===============================
+    if historico:
+        plt.figure(figsize=(10, 6))
+
+        # Série 1: soma histórica
+        plt.plot(labels_hist, historico, label="Soma Histórica", linewidth=2)
+
+        # Série 2: soma prevista (se existir)
+        if previsoes:
+            plt.plot(labels_hist[-len(previsoes):], previsoes,
+                     label="Soma Prevista", linestyle="--", linewidth=2)
+
+        # Série 3: médias (só adiciona se existirem)
+        if media_hist:
+            plt.plot(labels_hist, media_hist, label="Média Histórica", linewidth=2, alpha=0.7)
+        if media_prev:
+            plt.plot(labels_hist[-len(media_prev):], media_prev,
+                     label="Média Prevista", linestyle="--", linewidth=2, alpha=0.7)
+
+        plt.title("Histórico vs Previsões — Soma e Média ao longo do tempo", fontsize=14)
+        plt.xlabel("Período (Ano-Mês)")
+        plt.ylabel("Número de Casos")
+        plt.legend()
+        plt.grid(True, linestyle="--", alpha=0.6)
+        plt.tight_layout()
+
+        caminho = os.path.join(tmp_dir, "historico_previsoes_soma_media.png")
+        plt.savefig(caminho, dpi=150)
+        plt.close()
+        saved["historico_previsoes_soma_media"] = caminho
+
+    # ===============================
+    # 2️⃣ Gráfico: Contribuição por Fator
+    # ===============================
+    if feature_importance:
+        fatores = list(feature_importance.keys())
+        importancias = list(feature_importance.values())
+
+        fatores_ordenados = [x for _, x in sorted(zip(importancias, fatores), reverse=True)]
+        importancias_ordenadas = sorted(importancias, reverse=True)
+
+        plt.figure(figsize=(10, 6))
+        plt.barh(fatores_ordenados, importancias_ordenadas, color="#9467bd", alpha=0.85)
+        plt.xlabel("Importância")
+        plt.title("Contribuição por Fator (Feature Importance)", fontsize=14)
+        plt.gca().invert_yaxis()
+        plt.grid(axis="x", linestyle="--", alpha=0.6)
+        plt.tight_layout()
+
+        caminho = os.path.join(tmp_dir, "contribuicao_fatores.png")
+        plt.savefig(caminho, dpi=150)
+        plt.close()
+        saved["feature_importance"] = caminho
+
+    return saved
+
+@app.route('/api/export_previsao_pdf', methods=['POST'])
+def export_previsao_pdf():
+    payload = request.get_json()
+
+    # --- 1️⃣ Gera análises textuais ---
+    descricoes = gerar_descricoes_previsao(payload)
+
+    # --- 2️⃣ Gera gráficos temporários ---
+    tmp_dir = tempfile.mkdtemp()
+    try:
+        print(payload)
+        graficos = criar_graficos_temp_previsao(payload, tmp_dir)
+        print(graficos)
+    except Exception as e:
+        print("Erro ao criar gráficos temporários:", e)
+        graficos = {}
+
+    # --- 3️⃣ Cria o PDF ---
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer)
+    styles = getSampleStyleSheet()
+    story = []
+
+    # === Cabeçalho ===
+    story.append(Paragraph("<b>Relatório de Previsão de Letalidade Violenta</b>", styles["Title"]))
+    story.append(Spacer(1, 8))
+
+    # ----------------------------
+    # Aqui: insere os valores de todas as variáveis (no início do PDF)
+    # ----------------------------
+    # Primeiro tenta obter features_dict diretamente do payload (ideal, vindo do frontend)
+    features_dict = payload.get("features_dict")
+    # Se não existir, tenta reconstruir a partir de payload["features"] e feature_names (caso feature_names esteja no escopo)
+    if not features_dict:
+        features_list = payload.get("features") or payload.get("features_array") or []
+        try:
+            # feature_names deve existir no módulo (definido no servidor)
+            features_dict = dict(zip(feature_names, features_list))
+        except Exception:
+            # fallback: cria chaves genéricas
+            features_dict = {f"feature_{i}": v for i, v in enumerate(features_list)}
+
+    # Título da seção de variáveis
+    story.append(Paragraph("<b>Valores das Variáveis (entrada)</b>", styles["Heading2"]))
+    story.append(Spacer(1, 6))
+
+    # Constrói uma tabela com duas colunas: variável | valor
+    table_data = [["Variável", "Valor"]]
+    # Garante ordem estável (ordenamos pela chave para previsibilidade)
+    for k in sorted(features_dict.keys()):
+        # Formata números com 3 casas decimais quando forem float/numéricos
+        v = features_dict[k]
+        if isinstance(v, float):
+            v_str = f"{v:.3f}"
+        else:
+            v_str = str(v)
+        table_data.append([k.replace('_', ' '), v_str])
+
+    # Cria Table com estilo simples
+    tbl = Table(table_data, colWidths=[200, 200])
+    tbl.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#f2f2f2')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.black),
+        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+        ('FONTSIZE', (0, 0), (-1, -1), 9),
+        ('INNERGRID', (0, 0), (-1, -1), 0.25, colors.grey),
+        ('BOX', (0,0), (-1,-1), 0.25, colors.grey),
+        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+    ]))
+    story.append(tbl)
+    story.append(Spacer(1, 12))
+
+    story.append(Paragraph(f"Previsão: {payload.get('previsao_leitura', '-')}", styles["Normal"]))
+    story.append(Paragraph(f"Intervalo 95%: {payload.get('intervalo_95', '-')}", styles["Normal"]))
+    story.append(Paragraph(f"Tendência: {payload.get('tendencia', '-')}", styles["Normal"]))
+    story.append(Paragraph(f"Risco: {payload.get('risco', '-')}", styles["Normal"]))
+    story.append(Spacer(1, 12))
+    
+    # --- Drivers principais (colocar logo após os valores) ---
+    drivers = payload.get("drivers", [])
+    story.append(Paragraph("<b>Drivers Principais</b>", styles["Heading2"]))
+    story.append(Spacer(1, 6))
+    if drivers:
+        # se for lista, coloca em bullets; se string, só imprime
+        if isinstance(drivers, (list, tuple)):
+            for d in drivers:
+                story.append(Paragraph(f"• {d}", styles["Normal"]))
+        else:
+            story.append(Paragraph(str(drivers), styles["Normal"]))
+    else:
+        story.append(Paragraph("Nenhum driver identificado.", styles["Normal"]))
+    story.append(Spacer(1, 12))
+
+    # === Análise textual ===
+    story.append(Paragraph("<b>Análise da Previsão</b>", styles["Heading2"]))
+    story.append(Paragraph(descricoes.get("historico", "—"), styles["Normal"]))
+    story.append(Spacer(1, 12))
+
+    # === Importância das Variáveis (gráfico) ===
+    story.append(Paragraph("<b>Importância das Variáveis / Contribuição por Fator</b>", styles["Heading2"]))
+    story.append(Spacer(1, 6))
+    if "feature_importance" in graficos:
+        try:
+            story.append(Image(graficos["feature_importance"], width=450, height=300))
+            story.append(Spacer(1, 10))
+        except Exception as e:
+            print("Erro ao adicionar imagem feature_importance:", e)
+    # também escreve o resumo textual gerado
+    story.append(Paragraph(descricoes.get("feature_importance", "—"), styles["Normal"]))
+    story.append(Spacer(1, 12))
+
+    # === Intervalo de confiança ===
+    story.append(Paragraph("<b>Intervalo de Confiança</b>", styles["Heading2"]))
+    story.append(Paragraph(descricoes.get("intervalo_confianca", "—"), styles["Normal"]))
+    story.append(Spacer(1, 12))
+
+    # === Gráfico único: Histórico vs Previsões (Soma e Média) ===
+    if "historico_previsoes_soma_media" in graficos:
+      story.append(Paragraph("<b>Histórico vs Previsões — Soma e Média ao longo do tempo</b>", styles["Heading2"]))
+      story.append(Image(graficos["historico_previsoes_soma_media"], width=450, height=300))
+      story.append(Spacer(1, 6))
+      story.append(Paragraph(descricoes.get("soma_media_comparacao", "—"), styles["Normal"]))
+      story.append(Spacer(1, 12))
+
+    # Finaliza documento
+    doc.build(story)
+
+    buffer.seek(0)
+
+    # Limpa arquivos temporários
+    try:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+    except Exception:
+        pass
+
+    return send_file(buffer, as_attachment=True, download_name='relatorio_previsao.pdf', mimetype='application/pdf')
+  
 # ===========================
 # Main
 # ===========================
