@@ -1,24 +1,127 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="stylesheet" href="../static/css/login.css">
+    <title>Login - Crime Monitor</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #f2f2f2;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
 
-    <title>Login - Preditor de Crime</title>
+        .login-container {
+            background: #fff;
+            padding: 30px 40px;
+            border-radius: 10px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+            width: 350px;
+        }
+
+        h2 {
+            text-align: center;
+            margin-bottom: 20px;
+            color: #333;
+        }
+
+        label {
+            display: block;
+            margin-top: 15px;
+            font-weight: bold;
+            color: #555;
+        }
+
+        input[type="text"],
+        input[type="password"] {
+            width: 100%;
+            padding: 10px;
+            margin-top: 5px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            box-sizing: border-box;
+        }
+
+        .captcha-container {
+            display: flex;
+            align-items: center;
+            margin-top: 10px;
+        }
+
+        .captcha-container img {
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+
+        .captcha-container button {
+            margin-left: 10px;
+            padding: 5px 10px;
+            border: none;
+            background: #3763bc;
+            color: white;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        .captcha-container button:hover {
+            background: #3763bc;
+        }
+
+        button[type="submit"] {
+            width: 100%;
+            padding: 10px;
+            margin-top: 20px;
+            background: #3763bc;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+
+        button[type="submit"]:hover {
+            background: #45a049;
+        }
+
+        ul {
+            margin-top: 10px;
+            color: red;
+        }
+    </style>
 </head>
 <body>
-    
-    <div class="conteiner-login">
-        <h1>Login</h1> 
-        <p>Sistema de Previsão de </br>
-             Letalidade Violenta</p>
-        <input type="text" placeholder="Nome">
-        <br> </br>
-        <input type="password" placeholder="Senha">
-        <br> </br>
-        <button>Enviar</button>
+    <div class="login-container">
+        <h2>Login Crime Monitor</h2>
+        <form method="POST" action="/login">
+            <label>Usuário:</label>
+            <input type="text" name="username" required>
 
+            <label>Senha:</label>
+            <input type="password" name="password" required>
+
+            <label>Captcha:</label>
+            <div class="captcha-container">
+                <img src="/captcha" alt="Captcha">
+                <button type="button" onclick="document.getElementById('captchaImage').src='/captcha?'+Date.now()">🔄</button>
+            </div>
+           <input type="text" name="captcha" placeholder="Digite o captcha" maxlength="5" required>
+<img src="{{ url_for('captcha') }}" alt="CAPTCHA">
+
+            <button type="submit">Entrar</button>
+        </form>
+
+        {% with messages = get_flashed_messages() %}
+          {% if messages %}
+            <ul>
+              {% for msg in messages %}
+                <li>{{ msg }}</li>
+              {% endfor %}
+            </ul>
+          {% endif %}
+        {% endwith %}
     </div>
 </body>
 </html>

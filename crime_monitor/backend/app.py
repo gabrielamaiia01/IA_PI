@@ -1869,6 +1869,7 @@ Média - Histórico: {media_hist:.1f} | Previsões: {media_prev:.1f}
         print(f"Erro ao gerar descrições de previsão: {e}")
         return descricoes
 
+
 def criar_graficos_temp_previsao(payload, tmp_dir):
     """
     Cria dois gráficos:
@@ -1916,6 +1917,14 @@ def criar_graficos_temp_previsao(payload, tmp_dir):
         plt.ylabel("Número de Casos")
         plt.legend()
         plt.grid(True, linestyle="--", alpha=0.6)
+
+        # --- 🔹 Mostrar apenas alguns rótulos no eixo X ---
+        if len(labels_hist) > 12:
+            passo = max(1, len(labels_hist) // 12)  # mostra ~12 rótulos no máximo
+            plt.xticks(range(0, len(labels_hist), passo), labels_hist[::passo], rotation=45, ha='right')
+        else:
+            plt.xticks(range(len(labels_hist)), labels_hist, rotation=45, ha='right')
+
         plt.tight_layout()
 
         caminho = os.path.join(tmp_dir, "historico_previsoes_soma_media.png")
