@@ -36,7 +36,7 @@ import json
 
 
 import re
-
+from db import get_connection
 # ----------------------------
 # Config: modelo de geração
 # ----------------------------
@@ -1731,9 +1731,6 @@ def export_agrupamentos_pdf():
         print(f"[ERRO PDF AGRUPAMENTOS] {e}")
         return jsonify({"erro":"Falha ao gerar PDF"}), 500
 
-
-@app.route('/login', methods=['GET', 'POST'])
-def login():
     if request.method == 'POST':
         username = request.form.get('username')
         password = request.form.get('password')
@@ -1770,6 +1767,88 @@ def login():
         return redirect(url_for('index'))
 
     return render_template('login.html')
+@app.route("/cadastro", methods=["GET", "POST"])
+def cadastro():
+    if request.method == "POST":
+        nome = request.form["nome"]
+        email = request.form["email"]
+        username = request.form["username"]
+        password = request.form["password"]
+        confirm_password = request.form["confirm_password"]
+ 
+        # Validação simples de senha
+        if password != confirm_password:
+            flash("As senhas não coincidem!")
+            return redirect(url_for("cadastro"))
+ 
+        try:
+            conn = get_connection()
+            cur = conn.cursor()
+           
+            # Inserção na tabela users
+            cur.execute("""
+                INSERT INTO users (nome, email, username, password)
+                VALUES (%s, %s, %s, %s)
+            """, (nome, email, username, password))
+ 
+            conn.commit()
+            cur.close()
+            conn.close()
+ 
+            flash("Cadastro realizado com sucesso!")
+            return redirect(url_for("login"))
+ 
+        except psycopg2.IntegrityError:
+            # Caso tente inserir email ou username duplicado
+            conn.rollback()
+            flash("Email ou usuário já cadastrado!")
+            return redirect(url_for("cadastro"))
+ 
+        except Exception as e:
+            flash(f"Erro ao cadastrar: {e}")
+            return redirect(url_for("cadastro"))
+ 
+    return render_template("cadastro.html")
+ 
+ 
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+        if request.method == 'POST':
+            username = request.form.get('username')
+            password = request.form.get('password')
+            user_captcha = request.form.get('captcha', '').upper()  # pega captcha digitado
+ 
+            # validação do captcha
+            if user_captcha != session.get('captcha_text', ''):
+                flash("Captcha incorreto!")
+                return redirect(url_for('login'))
+ 
+           
+            # Conectar ao banco de dados
+            conn = psycopg2.connect(
+                    dbname=DB_NAME,
+                    user=DB_USER,
+                    password=DB_PASSWORD,
+                    host=DB_HOST,
+                    port=DB_PORT
+                )
+            from db import get_connection
+ 
+            conn = get_connection()
+            cur = conn.cursor()
+            # validação do usuário no banco
+            cur.execute("SELECT * FROM users WHERE username=%s AND password=%s", (username, password))
+            user = cur.fetchone()
+            if not user:
+                flash("Usuário ou senha incorretos!")
+                return redirect(url_for('login'))
+ 
+            # login bem-sucedido
+            session['user_id'] = user[0]
+            flash("Login realizado com sucesso!")
+            return redirect(url_for('index'))
+ 
+        return render_template('login.html')
 
 def gerar_descricoes_previsao(payload):
     """

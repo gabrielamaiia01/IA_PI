@@ -1,28 +1,29 @@
-<!DOCTYPE html>
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>Login - Crime Monitor</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cadastro - Monitor RJ</title>
+    <link rel="stylesheet" href="/static/css/style.css">
     <style>
         body {
             font-family: Arial, sans-serif;
             background: #f2f2f2;
+            margin: 0;
             display: flex;
             justify-content: center;
             align-items: center;
             height: 100vh;
-            margin: 0;
         }
  
-        .login-container {
+        .register-container {
             background: #fff;
             padding: 30px 40px;
             border-radius: 10px;
             box-shadow: 0 4px 10px rgba(0,0,0,0.1);
-            width: 350px;
+            width: 400px;
         }
  
-        h2 {
+        .register-container h2 {
             text-align: center;
             margin-bottom: 20px;
             color: #333;
@@ -36,38 +37,14 @@
         }
  
         input[type="text"],
-        input[type="password"] {
+        input[type="password"],
+        input[type="email"] {
             width: 100%;
             padding: 10px;
             margin-top: 5px;
             border: 1px solid #ccc;
             border-radius: 5px;
             box-sizing: border-box;
-        }
- 
-        .captcha-container {
-            display: flex;
-            align-items: center;
-            margin-top: 10px;
-        }
- 
-        .captcha-container img {
-            border: 1px solid #ccc;
-            border-radius: 5px;
-        }
- 
-        .captcha-container button {
-            margin-left: 10px;
-            padding: 5px 10px;
-            border: none;
-            background: #3763bc;
-            color: white;
-            border-radius: 5px;
-            cursor: pointer;
-        }
- 
-        .captcha-container button:hover {
-            background: #3763bc;
         }
  
         button[type="submit"] {
@@ -86,6 +63,20 @@
             background: #45a049;
         }
  
+        .login-link {
+            text-align: center;
+            margin-top: 15px;
+        }
+ 
+        .login-link a {
+            color: #3763bc;
+            text-decoration: none;
+        }
+ 
+        .login-link a:hover {
+            text-decoration: underline;
+        }
+ 
         ul {
             margin-top: 10px;
             color: red;
@@ -93,25 +84,30 @@
     </style>
 </head>
 <body>
-    <div class="login-container">
-        <h2>Login Crime Monitor</h2>
-        <form method="POST" action="/login">
+    <div class="register-container">
+        <h2>Cadastro - Monitor RJ</h2>
+        <form method="POST" action="/cadastro">
+            <label>Nome:</label>
+            <input type="text" name="nome" placeholder="Digite seu nome" pattern="[A-Za-zÀ-ÿ\s]+" title="Apenas letras são permitidas" required>
+ 
+            <label>Email:</label>
+            <input type="email" name="email" placeholder="Digite seu email" required>
+ 
             <label>Usuário:</label>
-            <input type="text" name="username" required>
+            <input type="text" name="username" placeholder="Escolha um usuário" required>
  
             <label>Senha:</label>
-            <input type="password" name="password" required>
+            <input type="password" name="password" placeholder="Digite sua senha" required>
  
-            <label>Captcha:</label>
-            <div class="captcha-container">
-                <img src="/captcha" alt="Captcha">
-                <button type="button" onclick="document.getElementById('captchaImage').src='/captcha?'+Date.now()">🔄</button>
-            </div>
-           <input type="text" name="captcha" placeholder="Digite o captcha" maxlength="5" required>
-<img src="{{ url_for('captcha') }}" alt="CAPTCHA">
+            <label>Confirmar Senha:</label>
+            <input type="password" name="confirm_password" placeholder="Repita sua senha" required>
  
-            <button type="submit">Entrar</button>
+            <button type="submit">Cadastrar</button>
         </form>
+ 
+        <div class="login-link">
+            Já tem uma conta? <a href="/login">Faça login</a>
+        </div>
  
         {% with messages = get_flashed_messages() %}
           {% if messages %}
@@ -122,4 +118,6 @@
             </ul>
           {% endif %}
         {% endwith %}
-    </div
+    </div>
+</body>
+</html>

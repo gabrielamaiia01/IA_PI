@@ -1,7 +1,10 @@
+crimes db: 
+ 
+ 
 CREATE DATABASE crimes;
-
+ 
 \c crimes
-
+ 
 CREATE TABLE IF NOT EXISTS dados_previstos
 (
     prev_id bigserial NOT NULL,
@@ -22,7 +25,7 @@ CREATE TABLE IF NOT EXISTS dados_previstos
     registro_ocorrencias integer,
     CONSTRAINT dados_previstos_pkey PRIMARY KEY (prev_id)
 );
-
+ 
 CREATE TABLE IF NOT EXISTS dados_reais
 (
     real_id bigserial NOT NULL,
@@ -43,9 +46,14 @@ CREATE TABLE IF NOT EXISTS dados_reais
     registro_ocorrencias integer,
     CONSTRAINT dados_reais_pkey PRIMARY KEY (real_id)
 );
-
-CREATE TABLE IF NOT EXISTS users
-(
-    email varchar(100) NOT NULL,
-    senha varchar(15) NOT NULL
+ 
+CREATE TABLE IF NOT EXISTS users (
+    user_id SERIAL PRIMARY KEY,
+    nome VARCHAR(100) NOT NULL,
+    email VARCHAR(150) UNIQUE NOT NULL,
+    username VARCHAR(50) UNIQUE NOT NULL,
+    password VARCHAR(255) NOT NULL,
 );
+ 
+INSERT INTO users (nome, email, username, password)
+VALUES ('Elias', 'eliasasd321@gmail.com', 'elias', '123456');
