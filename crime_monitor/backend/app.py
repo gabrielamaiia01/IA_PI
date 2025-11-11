@@ -249,7 +249,7 @@ def salvar_previsao_banco(features_dict, prediction_value):
         )
         cursor = conn.cursor()
         cursor.execute("""
-            INSERT INTO crimes_RJ.dados_previstos
+            INSERT INTO public.dados_previstos
             (cisp, mcirc, mes, ano, letalidade_violenta, tentat_hom, estupro,
              lesao_corp_culposa, roubo_veiculo, estelionato, apreensao_drogas,
              trafico_drogas, apf, pessoas_desaparecidas, encontro_cadaver, registro_ocorrencias)
@@ -1202,7 +1202,7 @@ def previsao_api():
             cursor = conn.cursor()
             cursor.execute("""
                 SELECT ano, mes, SUM(letalidade_violenta), AVG(letalidade_violenta)
-                FROM crimes_RJ.dados_previstos
+                FROM public.dados_previstos
                 GROUP BY ano, mes
                 ORDER BY ano, mes
             """)

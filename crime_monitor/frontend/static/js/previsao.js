@@ -1,4 +1,4 @@
-document.addEventListener('DOMContentLoaded', () => { 
+document.addEventListener('DOMContentLoaded', () => {
     const form = document.getElementById('prediction-form');
     const loadingEl = document.getElementById('loading');
     const errorEl = document.getElementById('error-message');
@@ -13,6 +13,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     let chartInstance = null;
     let featureChart = null;
+    let ultimaPrevisao = null;
 
     // ======= Preenche médias dos campos desativados =======
     async function preencherMediasDisabled() {
@@ -42,8 +43,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     {
                         label: 'Soma de histórico',
                         data: historico_valores,
-                        borderColor: 'rgba(0, 123, 255, 1)',        // azul vibrante
-                        backgroundColor: 'rgba(0, 123, 255, 0.2)',  // azul translúcido
+                        borderColor: 'rgba(0, 123, 255, 1)',
+                        backgroundColor: 'rgba(0, 123, 255, 0.2)',
                         fill: true,
                         tension: 0.3,
                         pointBackgroundColor: 'rgba(0, 123, 255, 1)',
@@ -52,8 +53,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     {
                         label: 'Soma das previsões',
                         data: prev_valores,
-                        borderColor: 'rgba(255, 165, 0, 1)',        // laranja forte
-                        backgroundColor: 'rgba(255, 165, 0, 0.2)',  // laranja translúcido
+                        borderColor: 'rgba(255, 165, 0, 1)',
+                        backgroundColor: 'rgba(255, 165, 0, 0.2)',
                         borderDash: [5, 5],
                         fill: true,
                         tension: 0.3,
@@ -63,16 +64,16 @@ document.addEventListener('DOMContentLoaded', () => {
                     {
                         label: 'Média Histórica',
                         data: media_historica_valores,
-                        borderColor: 'rgba(40, 167, 69, 1)',        // verde
+                        borderColor: 'rgba(40, 167, 69, 1)',
                         backgroundColor: 'rgba(40, 167, 69, 0.1)',
-                        fill: '+1', // preenche até o dataset acima
+                        fill: '+1',
                         tension: 0.3,
                         pointRadius: 0
                     },
                     {
                         label: 'Média de Previsões',
                         data: media_previsoes_valores,
-                        borderColor: 'rgba(220, 53, 69, 1)',        // vermelho
+                        borderColor: 'rgba(220, 53, 69, 1)',
                         backgroundColor: 'rgba(220, 53, 69, 0.1)',
                         fill: false,
                         tension: 0.3,
@@ -91,7 +92,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     legend: { display: true },
                     tooltip: {
                         callbacks: {
-                            label: function(context) {
+                            label: function (context) {
                                 return `${context.dataset.label}: ${context.parsed.y.toFixed(2)}`;
                             }
                         }
@@ -139,7 +140,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         ticks: {
                             autoSkip: false,
                             padding: 10,
-                            callback: function(value) {
+                            callback: function (value) {
                                 const label = this.getLabelForValue(value);
                                 return label.length > 30 ? label.match(/.{1,30}/g) : label;
                             }
@@ -151,7 +152,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // ======= Evento do formulário =======
+    // ======= Evento do formulário de previsão =======
     form.addEventListener('submit', async (e) => {
         e.preventDefault();
         loadingEl.style.display = 'block';
@@ -168,16 +169,16 @@ document.addEventListener('DOMContentLoaded', () => {
             });
 
             const data = await response.json();
-            console.log(data);
-
             if (!data.success) throw new Error(data.error || 'Erro desconhecido na previsão.');
 
+            // Exibe resultados
             previsaoLeituraEl.textContent = Math.round(data.previsao_leitura);
             riscoEl.textContent = data.risco;
             intervalo95El.textContent = `${Math.round(data.intervalo_95[0])} - ${Math.round(data.intervalo_95[1])}`;
             tendenciaEl.textContent = data.tendencia;
             driversPrincipaisEl.textContent = "Drivers Principais: " + data.drivers;
 
+            // Atualiza gráficos
             criarGraficoHistoricoPrevisao(
                 data.historico_valores,
                 data.historico_labels,
@@ -188,6 +189,32 @@ document.addEventListener('DOMContentLoaded', () => {
 
             mostrarFeatureImportance(data.feature_importance);
 
+            // Armazena a última previsão completa
+            ultimaPrevisao = {
+                ...data,
+                features_dict: {
+                    cisp: features[0],
+                    mes: features[1],
+                    ano: features[2],
+                    mcirc: features[3],
+                    tentat_hom: features[4],
+                    estupro: features[5],
+                    lesao_corp_culposa: features[6],
+                    roubo_veiculo: features[7],
+                    estelionato: features[8],
+                    apreensao_drogas: features[9],
+                    trafico_drogas: features[10],
+                    apf: features[11],
+                    pessoas_desaparecidas: features[12],
+                    encontro_cadaver: features[13],
+                    registro_ocorrencias: features[14]
+                }
+            };
+
+            // Habilita o botão de exportar
+            const btnExportar = document.getElementById('btn-export-previsao');
+            if (btnExportar) btnExportar.disabled = false;
+
             loadingEl.style.display = 'none';
             successEl.style.display = 'block';
         } catch (error) {
@@ -196,32 +223,76 @@ document.addEventListener('DOMContentLoaded', () => {
             errorEl.style.display = 'block';
         }
     });
+
+    // ======= Preenche selects (CISP e MCIRC) =======
     async function preencherSelects() {
         try {
             const response = await fetch('/api/valores_select');
             const data = await response.json();
-            console.log(data);
 
-            // Preenche CISP
             const cispList = document.getElementById('lista-cisps');
+            const mcircList = document.getElementById('lista-mcircs');
+
             data.cisps.forEach(c => {
                 const option = document.createElement('option');
                 option.value = c;
                 cispList.appendChild(option);
             });
 
-            // Preenche MCIRC
-            const mcircList = document.getElementById('lista-mcircs');
             data.mcircs.forEach(m => {
                 const option = document.createElement('option');
                 option.value = m;
                 mcircList.appendChild(option);
             });
-
         } catch (err) {
             console.error("Erro ao preencher datalists:", err);
         }
     }
-
     preencherSelects();
+
+    // ======= Exportar PDF =======
+    async function exportarPrevisaoPDF() {
+        if (!ultimaPrevisao) {
+            alert('Por favor, faça uma previsão antes de exportar o relatório.');
+            return;
+        }
+
+        const btnExportar = document.getElementById('btn-export-previsao');
+
+        try {
+            const response = await fetch('/api/export_previsao_pdf', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(ultimaPrevisao)
+            });
+
+            if (!response.ok) throw new Error('Erro ao gerar PDF');
+
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+
+            const features = ultimaPrevisao.features_dict || {};
+            const filename = `relatorio_previsao.pdf`;
+            a.download = filename;
+
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+
+            alert('Relatório PDF gerado com sucesso!');
+        } catch (error) {
+            console.error('Erro ao exportar PDF:', error);
+            alert('Erro ao gerar relatório PDF: ' + error.message);
+        }
+    }
+
+    // ======= Evento do botão de exportar =======
+    const btnExportar = document.getElementById('btn-export-previsao');
+    if (btnExportar) {
+        btnExportar.addEventListener('click', exportarPrevisaoPDF);
+        btnExportar.disabled = true;
+    }
 });
