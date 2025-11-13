@@ -61,7 +61,7 @@ def insert_data(df):
     for idx, row in enumerate(df.itertuples(index=False, name=None), start=1):
         try:
             cursor.execute("""
-                INSERT INTO crimes_RJ.dados_reais
+                INSERT INTO public.dados_reais
                 (cisp, mes, ano, letalidade_violenta, tentat_hom, mcirc, estupro,
                 lesao_corp_culposa, roubo_veiculo, estelionato, apreensao_drogas,
                 trafico_drogas, apf, pessoas_desaparecidas, encontro_cadaver,

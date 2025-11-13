@@ -879,3 +879,41 @@ input:disabled {
     transform: translateY(-2px);
     box-shadow: 0 6px 12px rgba(0,0,0,0.2);
 }
+
+/* === Botão "Sair" fixado no fundo do nav vertical === */
+.sidebar nav {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.sidebar nav ul {
+    flex-grow: 1; /* empurra o "Sair" para o fundo */
+}
+
+.sidebar .logout {
+    margin-top: auto; /* fixa no final */
+    border-top: 1px solid #eee;
+    padding-top: 15px;
+}
+
+.sidebar .logout a {
+    display: block;
+    text-decoration: none;
+    color: #d9534f; /* vermelho elegante */
+    padding: 10px 15px;
+    border-radius: 5px;
+    transition: background-color 0.3s, color 0.3s;
+}
+
+.sidebar .logout a:hover {
+    background-color: #f8d7da;
+    color: #b52b27;
+}
+
+.logo>img{
+    width: 40px;
+    height: 40px;
+    vertical-align: middle;
+    margin-right: 10px;
+}

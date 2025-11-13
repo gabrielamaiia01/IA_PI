@@ -104,14 +104,18 @@
  
             <label>Captcha:</label>
             <div class="captcha-container">
-                <img src="/captcha" alt="Captcha">
-                <button type="button" onclick="document.getElementById('captchaImage').src='/captcha?'+Date.now()">🔄</button>
+                <img id="captchaImage" src="{{ url_for('captcha') }}" alt="Captcha">
+                <button type="button" onclick="refreshCaptcha()">🔄</button>
             </div>
-           <input type="text" name="captcha" placeholder="Digite o captcha" maxlength="5" required>
-<img src="{{ url_for('captcha') }}" alt="CAPTCHA">
- 
+
+            <input type="text" name="captcha" placeholder="Digite o captcha" maxlength="5" required>
+
             <button type="submit">Entrar</button>
         </form>
+        <br>
+        <div class="login-link">
+            Não tem uma conta? <a href="/cadastro">Faça o cadastro</a>
+        </div>
  
         {% with messages = get_flashed_messages() %}
           {% if messages %}
@@ -122,4 +126,12 @@
             </ul>
           {% endif %}
         {% endwith %}
-    </div
+    </div>
+    <script>
+        function refreshCaptcha() {
+            const captchaImage = document.getElementById('captchaImage');
+            captchaImage.src = "{{ url_for('captcha') }}" + "?" + new Date().getTime();
+        }
+    </script>
+</body>
+</html>

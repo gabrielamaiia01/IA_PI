@@ -37,6 +37,29 @@ import json
 
 import re
 from db import get_connection
+
+from functools import wraps
+import shutil  # Para limpar arquivos temporários
+import time    # Para time.sleep em gerar_texto_gpt4o
+
+# ... (seus imports existentes)
+
+# ===========================
+# Decorator de Autenticação
+# ===========================
+def login_required(f):
+    """
+    Decorator para proteger rotas que exigem autenticação.
+    Redireciona para login se o usuário não estiver autenticado.
+    """
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'user_id' not in session:
+            flash('Você precisa fazer login para acessar esta página.', 'warning')
+            return redirect(url_for('login'))
+        return f(*args, **kwargs)
+    return decorated_function
+
 # ----------------------------
 # Config: modelo de geração
 # ----------------------------
@@ -827,21 +850,31 @@ def captcha():
 # Rotas de páginas
 # ===========================
 @app.route('/')
+@login_required
 def index():
     return render_template('index.html')
 
 @app.route('/previsao')
+@login_required
 def previsao():
     return render_template('previsao.html')
 
 @app.route('/agrupamentos')
+@login_required
 def agrupamentos():
     return render_template('agrupamentos.html')
+
+@app.route('/logout')
+def logout():
+    session.clear()
+    flash('Você saiu da sua conta.', 'info')
+    return redirect(url_for('login'))
 
 # ===========================
 # API - Dashboard
 # ===========================
 @app.route('/api/dashboard_data')
+@login_required
 def dashboard_data():
     df = load_data()
     inicio = request.args.get("inicio")
@@ -1044,6 +1077,7 @@ def dashboard_data():
     }))
 
 @app.route('/api/medias')
+@login_required
 def api_medias():
     df = load_data()
     if df.empty:
@@ -1056,6 +1090,7 @@ def api_medias():
 # API - Municípios
 # ===========================
 @app.route("/api/municipios")
+@login_required
 def get_municipios():
     shapefile = SHAPEFILES["mcirc"]
     gdf = gpd.read_file(shapefile)
@@ -1068,6 +1103,7 @@ def get_municipios():
 # API - Mapa geográfico
 # ===========================
 @app.route("/api/map_image/<group_by>")
+@login_required
 def map_image(group_by):
     df = load_data()
     inicio = request.args.get("inicio")
@@ -1154,6 +1190,7 @@ def map_image(group_by):
 # API - Features do modelo
 # ===========================
 @app.route('/api/model_features')
+@login_required
 def model_features():
     return jsonify(feature_names)
 
@@ -1161,6 +1198,7 @@ def model_features():
 # API - Previsão
 # ===========================
 @app.route('/api/previsao', methods=['POST'])
+@login_required
 def previsao_api():
     global model
     df = load_data()
@@ -1262,6 +1300,7 @@ def previsao_api():
     })
 
 @app.route('/api/valores_select', methods=['GET'])
+@login_required
 def get_cisps():
     try:
         # Lê o shapefile CISP
@@ -1290,6 +1329,7 @@ def get_cisps():
 # API - Agrupamentos
 # ===========================
 @app.route("/api/agrupamentos_data")
+@login_required
 def agrupamentos_data():
     df = load_data()
     k = int(request.args.get("k", 4))
@@ -1427,6 +1467,7 @@ _gdf_cache = {}
 # API - Mapa de Clusters
 # ===========================
 @app.route("/api/mapa_clusters")
+@login_required
 def mapa_clusters():
     global kmeans, df_clusters_global  # usa os objetos globais já criados
 
@@ -1511,7 +1552,7 @@ def mapa_clusters():
         34: "#ffb6c1",  # rosa bebê
         35: "#8b0000",  # vermelho escuro
         36: "#2f4f4f",  # cinza-azulado escuro
-        -1: "#cccccc"   # neutro
+        -1: "#888888"   # neutro
     }
 
     clusters_in_data = sorted(gdf["cluster"].unique())
@@ -1545,6 +1586,7 @@ def mapa_clusters():
     return jsonify({"mapa_clusters": f"/static/img/{image_name}", "data": gdf[[shapefile_col, "cluster"]].to_dict(orient="records")})
 
 @app.route("/api/predizer_cluster", methods=["POST"])
+@login_required
 def predizer_cluster():
     try:
         data = request.get_json()
@@ -1577,6 +1619,7 @@ def predizer_cluster():
 # Rota principal: gera o PDF e retorna
 # ----------------------------
 @app.route("/api/export_dashboard_pdf")
+@login_required
 def export_dashboard_pdf():
     inicio = request.args.get("inicio") or "2003-01-01"
     fim = request.args.get("fim") or "2025-07-31"
@@ -1658,6 +1701,7 @@ def export_dashboard_pdf():
         return jsonify({"erro":"Falha ao gerar PDF"}), 500
 
 @app.route("/api/export_agrupamentos_pdf")
+@login_required
 def export_agrupamentos_pdf():
     inicio = request.args.get("inicio") or "2003-01-01"
     fim = request.args.get("fim") or "2025-07-31"
@@ -1731,41 +1775,6 @@ def export_agrupamentos_pdf():
         print(f"[ERRO PDF AGRUPAMENTOS] {e}")
         return jsonify({"erro":"Falha ao gerar PDF"}), 500
 
-    if request.method == 'POST':
-        username = request.form.get('username')
-        password = request.form.get('password')
-        user_captcha = request.form.get('captcha', '').upper()  # pega captcha digitado
-
-        # validação do captcha
-        if user_captcha != session.get('captcha_text', ''):
-            flash("Captcha incorreto!")
-            return redirect(url_for('login'))
-
-        
-        # Conectar ao banco de dados
-        conn = psycopg2.connect(
-                dbname=DB_NAME,
-                user=DB_USER,
-                password=DB_PASSWORD,
-                host=DB_HOST,
-                port=DB_PORT
-            )
-        from db import get_connection
-
-        conn = get_connection()
-        cur = conn.cursor()
-        # validação do usuário no banco
-        cur.execute("SELECT * FROM users WHERE username=%s AND password=%s", (username, password))
-        user = cur.fetchone()
-        if not user:
-            flash("Usuário ou senha incorretos!")
-            return redirect(url_for('login'))
-
-        # login bem-sucedido
-        session['user_id'] = user[0]
-        flash("Login realizado com sucesso!")
-        return redirect(url_for('index'))
-
     return render_template('login.html')
 @app.route("/cadastro", methods=["GET", "POST"])
 def cadastro():
@@ -1823,8 +1832,8 @@ def login():
                 flash("Captcha incorreto!")
                 return redirect(url_for('login'))
  
-           
-            # Conectar ao banco de dados
+            # Conectar ao banco de dadospsql -U postgres -h localhost -d crimes_RJ
+
             conn = psycopg2.connect(
                     dbname=DB_NAME,
                     user=DB_USER,
@@ -1832,9 +1841,6 @@ def login():
                     host=DB_HOST,
                     port=DB_PORT
                 )
-            from db import get_connection
- 
-            conn = get_connection()
             cur = conn.cursor()
             # validação do usuário no banco
             cur.execute("SELECT * FROM users WHERE username=%s AND password=%s", (username, password))
@@ -1882,7 +1888,7 @@ def gerar_descricoes_previsao(payload):
 
         prompt_historico = f"""
 Você é um analista de segurança pública.
-Analise a seguinte previsão de criminalidade e produza uma resposta curta (3-4 frases) em português:
+Analise a seguinte previsão de criminalidade e produza uma resposta em português:
 
 [PREVISÃO DE CRIMINALIDADE]
 {resumo_historico}
@@ -1935,7 +1941,7 @@ Compare o comportamento da letalidade violenta entre o histórico e as previsõe
 considerando tanto a soma total quanto a média mensal dos casos.
 Explique brevemente se há tendência de aumento, estabilidade ou redução,
 e interprete o que isso pode significar para o cenário de segurança.
-
+Mande em texto corrido, não em markdown.
 [SOMA E MÉDIA]
 Soma - Histórico: {soma_hist:.1f} | Previsões: {soma_prev:.1f}
 Média - Histórico: {media_hist:.1f} | Previsões: {media_prev:.1f}
@@ -2037,6 +2043,7 @@ def criar_graficos_temp_previsao(payload, tmp_dir):
     return saved
 
 @app.route('/api/export_previsao_pdf', methods=['POST'])
+@login_required
 def export_previsao_pdf():
     payload = request.get_json()
 
