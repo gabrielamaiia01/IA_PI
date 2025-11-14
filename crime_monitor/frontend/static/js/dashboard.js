@@ -98,8 +98,8 @@ document.addEventListener("DOMContentLoaded", async () => {
                     datasets: [{
                         label: "Letalidade Violenta",
                         data: data.evolucao_temporal.map(item => item.y),
-                        borderColor: "rgba(75, 192, 192, 1)",
-                        backgroundColor: "rgba(75, 192, 192, 0.2)",
+                        borderColor: "rgba(26, 50, 181, 1)",
+                        backgroundColor: "rgba(0, 81, 255, 0.54)",
                         fill: true,
                         tension: 0.3
                     }]
@@ -124,7 +124,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                     datasets: [{
                         label: 'Correlação com Letalidade Violenta',
                         data: values,
-                        backgroundColor: values.map(v => v >= 0 ? 'rgba(75, 192, 192, 0.7)' : 'rgba(255, 99, 132, 0.7)')
+                        backgroundColor: values.map(v => v >= 0 ? 'rgba(68, 78, 224, 0.7)' : 'rgba(0, 17, 255, 0.7)')
                     }]
                 },
                 options: {
