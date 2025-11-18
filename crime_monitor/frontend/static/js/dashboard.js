@@ -143,7 +143,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
             new Chart(ctxScatter, {
                 type: "scatter",
-                data: { datasets: [{ label: "Roubo x Letalidade", data: scatterData, backgroundColor: "rgba(75, 192, 192, 0.7)" }] },
+                data: { datasets: [{ label: "Roubo x Letalidade", data: scatterData, backgroundColor: "#007bff" }] },
                 options: { responsive: true }
             });
 

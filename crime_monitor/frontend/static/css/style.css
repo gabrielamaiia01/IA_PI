@@ -60,7 +60,7 @@ body {
 
 .sidebar nav ul li a {
     text-decoration: none;
-    color: #555;
+    color: #ffffff;
     padding: 10px 15px;
     display: block;
     border-radius: 10px;
@@ -79,6 +79,7 @@ body {
 
 .sidebar nav ul li a:hover {
     background-color: #e9ecef;
+    color: #0077b6;
 }
 span{
     margin-right: 10px;
@@ -282,9 +283,11 @@ span{
 .kpi-card {
     background-color: #fff;
     padding: 20px;
-    border-radius: 8px;
+    border-radius: 20px;
     box-shadow: 0 2px 4px rgba(0,0,0,0.05);
     box-sizing: border-box;
+    border: 2px solid blue;
+    /*box-shadow: 5px 2px rgba(58, 9, 191, 0.216);*/
 }
 
 .kpi-card h3 {
@@ -554,7 +557,7 @@ span{
     padding: 5px 10px;
     border-radius: 5px;
     font-size: 13px;
-    color: #555;
+    color:rgba(0, 17, 255, 0.801) ;
 }
 
 .highlight-box {
@@ -896,7 +899,7 @@ input:disabled {
 }
 
 .charts-header .btn-export-pdf {
-    background: linear-gradient(135deg, #0077b6, #00b4d8);
+    background: #007bff;
     border: none;
     border-radius: 50%;
     width: 40px;
@@ -943,15 +946,26 @@ input:disabled {
     transition: background-color 0.3s, color 0.3s;
 }
 
+.logout{
+    margin-bottom: 19px;
+}
+
 .sidebar .logout a:hover {
     background-color: #f8d7da;
     color: #b52b27;
 }
 
 .logo>img{
-    width: 90px;
-    height: 90px;
-    vertical-align: middle;
-    margin-right: 10px;
-
+    display: flex;
+    justify-content: center;  /* Centraliza horizontalmente */
+    align-items: center;      /* Centraliza verticalmente */
+    width: 200px;   /* tamanho reduzido */
+    height: auto;  /* mantém proporção */
+    margin-bottom: 20px;
 }
+
+/*.logo{
+    border-radius: 30px;
+    border: 2px solid #506BF2;
+
+}*/
