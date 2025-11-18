@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="pt-br">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -16,31 +17,34 @@
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css">
 </head>
+
 <body>
     <div class="container">
         <aside class="sidebar">
-            <div class="logo"> <img src="../static/img/image-removebg-preview.png" alt="Logo Monitor RJ"></div>
+             <div class="logo"> <img src="../static/img/image-removebg-preview.png" alt="Logo Monitor RJ">
+            </div>
+
             <nav class="nav-menu">
                 <ul>
                     <li class="active">
-    <a href="/">
-        <span class="material-symbols-outlined">dashboard</span>
-        Dashboard
-    </a>
-</li>
-                    <li>
-                           <a href="/previsao">
-        <span class="material-symbols-outlined">trending_up</span>
-        Previsão
-    </a>
+                        <a href="/">
+                            <span class="material-symbols-outlined">dashboard</span>
+                            Dashboard
+                        </a>
                     </li>
                     <li>
-                            <a href="/agrupamentos">
-        <span class="material-symbols-outlined">group_work</span>
-        Agrupamentos
-    </a>
-                        
-                    
+                        <a href="/previsao">
+                            <span class="material-symbols-outlined">trending_up</span>
+                            Previsão
+                        </a>
+                    </li>
+                    <li>
+                        <a href="/agrupamentos">
+                            <span class="material-symbols-outlined">group_work</span>
+                            Agrupamentos
+                        </a>
+
+
                     </li>
                 </ul>
 
@@ -59,7 +63,7 @@
                 <h1>Monitor de Letalidade Violenta - RJ</h1>
                 <span class="updated-date">Atualizado: Ago/2025</span>
             </header>
-
+            <div class="line"></div>
             <section class="filters">
                 <div class="filter-item">
                     <label for="data-inicio">Data início</label>
@@ -145,7 +149,8 @@
                             <div class="chart-type">Heatmap</div>
                         </div>
                         <div id="map-container" class="chart-placeholder" style="height: 300px;">
-                            <img id="map-img" alt="Mapa de letalidade violenta" style="height:100%; object-fit:contain;">
+                            <img id="map-img" alt="Mapa de letalidade violenta"
+                                style="height:100%; object-fit:contain;">
                         </div>
                     </div>
                 </div>
@@ -164,4 +169,5 @@
     <!-- JS local -->
     <script src="/static/js/dashboard.js"></script>
 </body>
+
 </html>
