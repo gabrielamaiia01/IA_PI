@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="pt-br">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -9,10 +10,11 @@
 
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined" />
     <!-- Google Font -->
-    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700&display=swap"
+        rel="stylesheet">
 
     <style>
-        *{
+        * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
@@ -20,7 +22,7 @@
         }
 
 
-        body{
+        body {
             background: #ffff;
             display: flex;
             align-items: center;
@@ -28,7 +30,7 @@
             height: 100vh;
         }
 
-        .container{
+        .container {
             background-color: #fff;
             border-radius: 20px;
             width: 98%;
@@ -39,46 +41,53 @@
             display: flex;
         }
 
-        h1{
+        h1 {
             color: #000000;
             margin-right: 25%;
         }
-        
-        p{
-            margin-right: 21%; 
+
+        h3 {
             text-align: left;
+            margin-right: 15px;
+            color: #003366;
+            margin-top: 8px;
+        }
+
+        p {
+
+            text-align: center;
             margin-top: 20px;
             font-weight: medium;
         }
 
 
-        .login-box, 
+        .login-box,
         .logo-box {
-    flex: 1;
-               }
+            flex: 1;
+        }
 
-               .login-box {
-                margin-top: 90px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-}
+        .login-box {
+            margin-top: 90px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
 
-.logo-box {
-    display: flex;
-    justify-content: center;
-    background-color: #0059B3;
-    border-radius: 25px;
-}
+        .logo-box {
+            display: flex;
+            justify-content: center;
+            background-color: #0059B3;
+            border-radius: 25px;
+        }
 
-.logo-box img {
-    margin-top: 150px;
-    width: 55%;
-    height: 60%;
+        .logo-box img {
+            margin-top: 150px;
+            width: 55%;
+            height: 60%;
 
-}
+        }
 
-        input{
+        input {
             background-color: #ffff;
             margin: 8px 0;
             border: none;
@@ -86,11 +95,11 @@
             width: 100%;
             border-color: #003366;
             border-bottom-style: solid;
-            border-bottom-width:initial;
+            border-bottom-width: initial;
             margin-top: 30px;
         }
 
-        label{
+        label {
             display: block;
             margin-top: 10px;
             text-align: left;
@@ -98,19 +107,19 @@
             color: #333;
         }
 
-        .captcha-box{
+        .captcha-box {
             display: flex;
             align-items: center;
             margin-top: 8px;
             gap: 10px;
         }
 
-        .captcha-box img{
+        .captcha-box img {
             border: 1px solid #aaa;
             border-radius: 6px;
         }
 
-        .captcha-refresh{
+        .captcha-refresh {
             padding: 7px 10px;
             border-radius: 6px;
             cursor: pointer;
@@ -118,94 +127,97 @@
             font-size: 14px;
         }
 
-        button[type="submit"]{
+        button[type="submit"] {
             background: #003366;
             color: white;
             border: none;
             padding: 12px;
             width: 100%;
-            border-radius: 8px;
+            border-radius: 25px;
             font-size: 14px;
             cursor: pointer;
             margin-top: 15px;
             font-weight: 600;
         }
 
-        button[type="submit"]:hover{
+        button[type="submit"]:hover {
             background: #0059B3;
         }
 
-        .cadastro-link{
+        .cadastro-link {
 
             color: #007BFF;
             font-weight: 600;
             text-decoration: none;
         }
 
-        .cadastro-link:hover{
+        .cadastro-link:hover {
             text-decoration: underline;
         }
 
-        ul { margin-top: 10px; color: red; }
-
+        ul {
+            margin-top: 10px;
+            color: red;
+            list-style: none;
+        }
     </style>
 
 </head>
+
 <body>
 
-        <!--<div class="logo-box">
-        <img src="../static/img/image-removebg-preview.png" alt="Logo Crime Monitor">
-    </div>-->
-<div class="container">
+    <div class="container">
+        <div class="login-box">
+            <h1>Fazer Login </br> </h1>
+            <h3> Acesse o sistema preditivo de crimes</h3>
 
-    
-    <div class="login-box">
-    <h1>Fazer Login</h1>
-    <p>Ainda não tem uma conta? </br>
-    <a href="/cadastro" class="cadastro-link">Crie uma aqui</a>.</p>
-        <form method="POST" action="/login">
-
-    
-            
-            <input type="text" name="username" placeholder="Insira seu usuário" required>
-    
-            <input type="password" name="password" placeholder="Insira sua senha" required>
-
-            <label>Captcha:</label>
-            <div class="captcha-box">
-                <img id="captchaImage" src="{{ url_for('captcha') }}" alt="Captcha">
-                <button type="button" class="captcha-refresh" onclick="refreshCaptcha()">🔄</button>
-            </div>
-
-            <input type="text" name="captcha" placeholder="Digite o captcha" maxlength="5" required>
-
-            <button type="submit">Entrar</button>
+            <form method="POST" action="/login">
 
 
-            {% with messages = get_flashed_messages() %}
-              {% if messages %}
+
+                <input type="text" name="username" placeholder="Insira seu usuário" required>
+
+                <input type="password" name="password" placeholder="Insira sua senha" required>
+
+                <label>Captcha:</label>
+                <div class="captcha-box">
+                    <img id="captchaImage" src="{{ url_for('captcha') }}" alt="Captcha">
+                    <button type="button" class="captcha-refresh" onclick="refreshCaptcha()">🔄</button>
+                </div>
+
+                <input type="text" name="captcha" placeholder="Digite o captcha" maxlength="5" required>
+
+                <button type="submit">Entrar</button>
+                <p>Ainda não tem uma conta? </br>
+                    <a href="/cadastro" class="cadastro-link">Crie uma aqui</a>.
+                </p>
+
+
+                {% with messages = get_flashed_messages() %}
+                {% if messages %}
                 <ul>
-                  {% for msg in messages %}
+                    {% for msg in messages %}
                     <li>{{ msg }}</li>
-                  {% endfor %}
+                    {% endfor %}
                 </ul>
-              {% endif %}
-            {% endwith %}
-        </form>
+                {% endif %}
+                {% endwith %}
+            </form>
+        </div>
+
+
+        <div class="logo-box">
+            <img src="../static/img/image-removebg-preview.png" alt="Logo Crime Monitor">
+        </div>
     </div>
 
-
-    <div class="logo-box">
-        <img src="../static/img/image-removebg-preview.png" alt="Logo Crime Monitor">
-    </div>
-</div>
-
-<script>
-function refreshCaptcha(){
-    document.getElementById('captchaImage').src =
-        "{{ url_for('captcha') }}" + "?" + new Date().getTime();
-}
-</script>
+    <script>
+        function refreshCaptcha() {
+            document.getElementById('captchaImage').src =
+                "{{ url_for('captcha') }}" + "?" + new Date().getTime();
+        }
+    </script>
 
 </body>
+
 </html>
