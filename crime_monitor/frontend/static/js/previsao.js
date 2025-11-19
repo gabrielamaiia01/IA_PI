@@ -52,7 +52,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     },
                     {
                         label: 'Soma das previsões',
-                        data: prev_valores,
+                        data: historicoLabels.map((lbl, i) =>
+                        prevLabels.includes(lbl) ? prevValores[i] : null
+                        ),
                         borderColor: 'rgba(255, 165, 0, 1)',
                         backgroundColor: 'rgba(255, 165, 0, 0.2)',
                         borderDash: [5, 5],

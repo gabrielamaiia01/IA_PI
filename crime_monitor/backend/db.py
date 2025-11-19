@@ -41,9 +41,11 @@ def load_csv():
  
     # Selecionar colunas esperadas
     colunas_banco = [
-        "cisp", "mes", "ano", "letalidade_violenta", "tentat_hom", "mcirc", "estupro",
-        "lesao_corp_culposa", "roubo_veiculo", "estelionato", "apreensao_drogas",
-        "trafico_drogas", "apf", "pessoas_desaparecidas", "encontro_cadaver",
+        "cisp", "mcirc", "mes", "ano",
+        "letalidade_violenta", "tentat_hom", "estupro",
+        "lesao_corp_culposa", "roubo_veiculo", "estelionato",
+        "apreensao_drogas", "trafico_drogas", "apf",
+        "pessoas_desaparecidas", "encontro_cadaver",
         "registro_ocorrencias"
     ]
  
@@ -62,7 +64,7 @@ def insert_data(df):
         try:
             cursor.execute("""
                 INSERT INTO public.dados_reais
-                (cisp, mes, ano, letalidade_violenta, tentat_hom, mcirc, estupro,
+                (cisp, mcirc, mes, ano, letalidade_violenta, tentat_hom, estupro,
                 lesao_corp_culposa, roubo_veiculo, estelionato, apreensao_drogas,
                 trafico_drogas, apf, pessoas_desaparecidas, encontro_cadaver,
                 registro_ocorrencias)

@@ -134,7 +134,7 @@ for key, shp_path in SHAPEFILES.items():
 # =======================
 model = None
 feature_names = [
-    'cisp', 'mes', 'ano', 'mcirc', 'tentat_hom', 'estupro',
+    'cisp', 'mes', 'ano', 'mcirc', 'letalidade_violenta', 'tentat_hom', 'estupro',
     'lesao_corp_culposa', 'roubo_veiculo', 'estelionato',
     'apreensao_drogas', 'trafico_drogas', 'apf',
     'pessoas_desaparecidas', 'encontro_cadaver', 'registro_ocorrencias'
@@ -1224,6 +1224,7 @@ def previsao_api():
     
     # === Média histórica mensal ===
     df_hist_media = df.groupby(['ano', 'mes'])['letalidade_violenta'].mean().reset_index()
+    df_hist_media = df_hist_media.sort_values(['ano', 'mes'])
     media_historica_valores = df_hist_media['letalidade_violenta'].tolist()
 
     # === Buscar previsões e médias no banco de dados em uma única conexão ===
@@ -1245,14 +1246,27 @@ def previsao_api():
                 ORDER BY ano, mes
             """)
             prev_data = cursor.fetchall()
+            prev_sum_map = {}
+            prev_avg_map = {}
+            for row in prev_data:
+                prev_labels = list(prev_sum_map.keys())
+                ano = int(row[0])
+                mes = int(row[1])
+                key = f"{ano}-{mes:02d}"
+                prev_sum_map[key] = float(row[2]) if row[2] is not None else 0.0
+                prev_avg_map[key] = float(row[3]) if row[3] is not None else None
             cursor.close()
             conn.close()
         except Exception as e:
             print("Erro ao buscar previsões no banco:", e)
 
-    prev_labels = [f"{row[0]}-{row[1]:02d}" for row in prev_data]
-    prev_valores = [row[2] for row in prev_data]
-    media_previsoes_valores = [row[3] for row in prev_data]
+    # === Dados históricos para gráfico ===
+    historico_labels = [f"{int(a)}-{int(m):02d}" for a, m in zip(df_hist['ano'], df_hist['mes'])]
+    historico_valores = df_hist['letalidade_violenta'].tolist()
+
+    # alinhar previsões a todas as labels historicas
+    prev_valores_alinhados = [ prev_sum_map.get(lbl, 0.0) for lbl in historico_labels ]
+    media_previsoes_alinhada = [ prev_avg_map.get(lbl, None) for lbl in historico_labels ]
 
     # === Informações do período atual ===
     mes = int(data['features'][1])
@@ -1280,10 +1294,6 @@ def previsao_api():
     except Exception as e:
         print("Erro ao salvar previsão (não fatal):", e)
 
-    # === Dados históricos para gráfico ===
-    historico_labels = df_hist.apply(lambda row: f"{int(row['ano'])}-{int(row['mes']):02d}", axis=1).tolist()
-    historico_valores = df_hist['letalidade_violenta'].tolist()
-
     return jsonify({
         "success": True,
         "previsao_leitura": pred,
@@ -1295,8 +1305,9 @@ def previsao_api():
         "historico_labels": historico_labels,
         "historico_valores": historico_valores,
         "media_historica_valores": media_historica_valores,
-        "prev_valores": prev_valores,
-        "media_previsoes_valores": media_previsoes_valores
+        "prev_valores": prev_valores_alinhados,
+        "media_previsoes_valores": media_previsoes_alinhada,
+        "prev_labels": prev_labels
     })
 
 @app.route('/api/valores_select', methods=['GET'])
@@ -1832,7 +1843,7 @@ def login():
                 flash("Captcha incorreto!")
                 return redirect(url_for('login'))
  
-            # Conectar ao banco de dadospsql -U postgres -h localhost -d crimes_RJ
+            # Conectar ao banco de dadospsql -U postgres -h localhost -d crimes
 
             conn = psycopg2.connect(
                     dbname=DB_NAME,
