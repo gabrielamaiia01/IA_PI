@@ -134,7 +134,7 @@ for key, shp_path in SHAPEFILES.items():
 # =======================
 model = None
 feature_names = [
-    'cisp', 'mes', 'ano', 'mcirc', 'letalidade_violenta', 'tentat_hom', 'estupro',
+    'cisp', 'mes', 'ano', 'mcirc', 'tentat_hom', 'estupro',
     'lesao_corp_culposa', 'roubo_veiculo', 'estelionato',
     'apreensao_drogas', 'trafico_drogas', 'apf',
     'pessoas_desaparecidas', 'encontro_cadaver', 'registro_ocorrencias'
@@ -1229,6 +1229,9 @@ def previsao_api():
 
     # === Buscar previsões e médias no banco de dados em uma única conexão ===
     prev_data = []
+    prev_labels = []
+    prev_sum_map = {}
+    prev_avg_map = {}
     if all([DB_NAME, DB_USER, DB_PASSWORD, DB_HOST, DB_PORT]):
         try:
             conn = psycopg2.connect(
@@ -1246,15 +1249,17 @@ def previsao_api():
                 ORDER BY ano, mes
             """)
             prev_data = cursor.fetchall()
-            prev_sum_map = {}
-            prev_avg_map = {}
+            
             for row in prev_data:
-                prev_labels = list(prev_sum_map.keys())
                 ano = int(row[0])
                 mes = int(row[1])
                 key = f"{ano}-{mes:02d}"
+                
                 prev_sum_map[key] = float(row[2]) if row[2] is not None else 0.0
                 prev_avg_map[key] = float(row[3]) if row[3] is not None else None
+            
+            prev_labels = list(prev_sum_map.keys())
+            
             cursor.close()
             conn.close()
         except Exception as e:
@@ -1265,7 +1270,7 @@ def previsao_api():
     historico_valores = df_hist['letalidade_violenta'].tolist()
 
     # alinhar previsões a todas as labels historicas
-    prev_valores_alinhados = [ prev_sum_map.get(lbl, 0.0) for lbl in historico_labels ]
+    prev_valores_alinhados = [ prev_sum_map.get(lbl, None) for lbl in historico_labels ]
     media_previsoes_alinhada = [ prev_avg_map.get(lbl, None) for lbl in historico_labels ]
 
     # === Informações do período atual ===
@@ -1607,7 +1612,7 @@ def predizer_cluster():
 
         k = int(data.get("k", 4))
         feature_names_cluster= [
-            'cisp', 'mes', 'ano', 'mcirc', 'letalidade_violenta', 'tentat_hom', 'estupro',
+            'cisp', 'mes', 'ano', 'mcirc', 'tentat_hom', 'estupro',
             'lesao_corp_culposa', 'roubo_veiculo', 'estelionato',
             'apreensao_drogas', 'trafico_drogas', 'apf',
             'pessoas_desaparecidas', 'encontro_cadaver', 'registro_ocorrencias'

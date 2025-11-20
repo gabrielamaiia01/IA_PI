@@ -3,18 +3,18 @@ document.addEventListener('DOMContentLoaded', () => {
     const loadingEl = document.getElementById('loading');
     const errorEl = document.getElementById('error-message');
     const successEl = document.getElementById('success-message');
-
+ 
     const previsaoLeituraEl = document.getElementById('previsao_leitura');
     const riscoEl = document.getElementById('risco');
     const intervalo95El = document.getElementById('intervalo_95');
     const tendenciaEl = document.getElementById('tendencia');
     const driversPrincipaisEl = document.getElementById('drivers_principais');
     const contribuicaoContainer = document.getElementById('contribuicaoContainer');
-
+ 
     let chartInstance = null;
     let featureChart = null;
     let ultimaPrevisao = null;
-
+ 
     // ======= Preenche médias dos campos desativados =======
     async function preencherMediasDisabled() {
         try {
@@ -29,12 +29,12 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
     preencherMediasDisabled();
-
+ 
     // ======= Criação do gráfico com intervalo de confiança =======
-    function criarGraficoHistoricoPrevisao(historico_valores, historico_labels, prev_valores, media_historica_valores, media_previsoes_valores) {
+    function criarGraficoHistoricoPrevisao(historico_valores, historico_labels, prev_valores, prev_labels, media_historica_valores, media_previsoes_valores) {
         const ctx = document.getElementById('historicoPrevisaoChart').getContext('2d');
         if (chartInstance) chartInstance.destroy();
-
+ 
         chartInstance = new Chart(ctx, {
             type: 'line',
             data: {
@@ -52,8 +52,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     },
                     {
                         label: 'Soma das previsões',
-                        data: historicoLabels.map((lbl, i) =>
-                        prevLabels.includes(lbl) ? prevValores[i] : null
+                        data: historico_labels.map((lbl, i) =>
+                        prev_labels.includes(lbl) ? prev_valores[i] : null
                         ),
                         borderColor: 'rgba(255, 165, 0, 1)',
                         backgroundColor: 'rgba(255, 165, 0, 0.2)',
@@ -103,7 +103,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
-
+ 
     // ======= Gráfico de Importância das Variáveis =======
     function mostrarFeatureImportance(featureImportance) {
         contribuicaoContainer.innerHTML = '';
@@ -113,13 +113,13 @@ document.addEventListener('DOMContentLoaded', () => {
         canvas.height = featureCount * 20;
         contribuicaoContainer.appendChild(canvas);
         const ctx = canvas.getContext('2d');
-
+ 
         const sorted = Object.entries(featureImportance).sort((a, b) => b[1] - a[1]);
         const labels = sorted.map(f => f[0]);
         const data = sorted.map(f => f[1]);
-
+ 
         if (featureChart) featureChart.destroy();
-
+ 
         featureChart = new Chart(ctx, {
             type: 'bar',
             data: {
@@ -153,44 +153,45 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
-
+ 
     // ======= Evento do formulário de previsão =======
     form.addEventListener('submit', async (e) => {
         e.preventDefault();
         loadingEl.style.display = 'block';
         errorEl.style.display = 'none';
         successEl.style.display = 'none';
-
+ 
         const features = Array.from(document.querySelectorAll('input')).map(input => Number(input.value) || 0);
-
+ 
         try {
             const response = await fetch('/api/previsao', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ features })
             });
-
+ 
             const data = await response.json();
             if (!data.success) throw new Error(data.error || 'Erro desconhecido na previsão.');
-
+ 
             // Exibe resultados
             previsaoLeituraEl.textContent = Math.round(data.previsao_leitura);
             riscoEl.textContent = data.risco;
             intervalo95El.textContent = `${Math.round(data.intervalo_95[0])} - ${Math.round(data.intervalo_95[1])}`;
             tendenciaEl.textContent = data.tendencia;
             driversPrincipaisEl.textContent = "Drivers Principais: " + data.drivers;
-
+ 
             // Atualiza gráficos
             criarGraficoHistoricoPrevisao(
                 data.historico_valores,
                 data.historico_labels,
                 data.prev_valores,
+                data.prev_labels,
                 data.media_historica_valores,
                 data.media_previsoes_valores
             );
-
+ 
             mostrarFeatureImportance(data.feature_importance);
-
+ 
             // Armazena a última previsão completa
             ultimaPrevisao = {
                 ...data,
@@ -212,11 +213,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     registro_ocorrencias: features[14]
                 }
             };
-
+ 
             // Habilita o botão de exportar
             const btnExportar = document.getElementById('btn-export-previsao');
             if (btnExportar) btnExportar.disabled = false;
-
+ 
             loadingEl.style.display = 'none';
             successEl.style.display = 'block';
         } catch (error) {
@@ -225,22 +226,22 @@ document.addEventListener('DOMContentLoaded', () => {
             errorEl.style.display = 'block';
         }
     });
-
+ 
     // ======= Preenche selects (CISP e MCIRC) =======
     async function preencherSelects() {
         try {
             const response = await fetch('/api/valores_select');
             const data = await response.json();
-
+ 
             const cispList = document.getElementById('lista-cisps');
             const mcircList = document.getElementById('lista-mcircs');
-
+ 
             data.cisps.forEach(c => {
                 const option = document.createElement('option');
                 option.value = c;
                 cispList.appendChild(option);
             });
-
+ 
             data.mcircs.forEach(m => {
                 const option = document.createElement('option');
                 option.value = m;
@@ -251,46 +252,46 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
     preencherSelects();
-
+ 
     // ======= Exportar PDF =======
     async function exportarPrevisaoPDF() {
         if (!ultimaPrevisao) {
             alert('Por favor, faça uma previsão antes de exportar o relatório.');
             return;
         }
-
+ 
         const btnExportar = document.getElementById('btn-export-previsao');
-
+ 
         try {
             const response = await fetch('/api/export_previsao_pdf', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(ultimaPrevisao)
             });
-
+ 
             if (!response.ok) throw new Error('Erro ao gerar PDF');
-
+ 
             const blob = await response.blob();
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-
+ 
             const features = ultimaPrevisao.features_dict || {};
             const filename = `relatorio_previsao.pdf`;
             a.download = filename;
-
+ 
             document.body.appendChild(a);
             a.click();
             window.URL.revokeObjectURL(url);
             document.body.removeChild(a);
-
+ 
             alert('Relatório PDF gerado com sucesso!');
         } catch (error) {
             console.error('Erro ao exportar PDF:', error);
             alert('Erro ao gerar relatório PDF: ' + error.message);
         }
     }
-
+ 
     // ======= Evento do botão de exportar =======
     const btnExportar = document.getElementById('btn-export-previsao');
     if (btnExportar) {
