@@ -1211,6 +1211,12 @@ def previsao_api():
     X = pd.DataFrame([data['features']], columns=feature_names)
     pred = int(round(model.predict(X)[0]))
 
+    # === Salvar previsão no banco ===
+    try:
+        salvar_previsao_banco(dict(zip(feature_names, data['features'])), pred)
+    except Exception as e:
+        print("Erro ao salvar previsão (não fatal):", e)
+
     # === Histórico real (soma por mês) ===
     df_hist = df.groupby(['ano', 'mes'])['letalidade_violenta'].sum().reset_index()
     df_hist = df_hist.sort_values(['ano', 'mes'])
@@ -1229,9 +1235,9 @@ def previsao_api():
 
     # === Buscar previsões e médias no banco de dados em uma única conexão ===
     prev_data = []
-    prev_labels = []
     prev_sum_map = {}
     prev_avg_map = {}
+    prev_labels = []
     if all([DB_NAME, DB_USER, DB_PASSWORD, DB_HOST, DB_PORT]):
         try:
             conn = psycopg2.connect(
@@ -1243,24 +1249,43 @@ def previsao_api():
             )
             cursor = conn.cursor()
             cursor.execute("""
-                SELECT ano, mes, SUM(letalidade_violenta), AVG(letalidade_violenta)
+                SELECT ano, mes, SUM(letalidade_violenta) AS soma, AVG(letalidade_violenta) AS media
                 FROM public.dados_previstos
                 GROUP BY ano, mes
                 ORDER BY ano, mes
             """)
             prev_data = cursor.fetchall()
-            
             for row in prev_data:
                 ano = int(row[0])
                 mes = int(row[1])
                 key = f"{ano}-{mes:02d}"
-                
-                prev_sum_map[key] = float(row[2]) if row[2] is not None else 0.0
+                prev_sum_map[key] = float(row[2]) if row[2] is not None else None
                 prev_avg_map[key] = float(row[3]) if row[3] is not None else None
+
+            try:
+               target_mes = int(data['features'][1])
+               target_ano = int(data['features'][2])
+
+               for c in sorted(df['cisp'].unique()):
+                 f = list(data['features'])
+                 f[0] = int(c)
+                 Xc = pd.DataFrame([f], columns=feature_names)
+                 try:
+                     pc = int(round(model.predict(Xc)[0]))
+                 except Exception as e_pred:
+                    print(f"Erro ao predizer para cisp {c}: {e_pred}")
+                    continue
+
+                 key = f"{target_ano}-{target_mes:02d}"
+                 existing = prev_sum_map.get(key)
+                 if existing is None:
+                     prev_sum_map[key] = pc
+                 else:
+                     prev_sum_map[key] = existing + pc
+            except Exception as e_agg:
+              print("Erro ao agregar previsões para todos os CISPs:", e_agg)
             
-            prev_labels = list(prev_sum_map.keys())
-            
-            cursor.close()
+            cursor.close()         
             conn.close()
         except Exception as e:
             print("Erro ao buscar previsões no banco:", e)
@@ -1269,9 +1294,11 @@ def previsao_api():
     historico_labels = [f"{int(a)}-{int(m):02d}" for a, m in zip(df_hist['ano'], df_hist['mes'])]
     historico_valores = df_hist['letalidade_violenta'].tolist()
 
-    # alinhar previsões a todas as labels historicas
+    # === Alinhar prev_valores e media_previsoes na mesma ordem de historico_labels ===
     prev_valores_alinhados = [ prev_sum_map.get(lbl, None) for lbl in historico_labels ]
     media_previsoes_alinhada = [ prev_avg_map.get(lbl, None) for lbl in historico_labels ]
+
+    prev_labels = [ lbl for lbl, val in zip(historico_labels, prev_valores_alinhados) if val is not None ]
 
     # === Informações do período atual ===
     mes = int(data['features'][1])
@@ -1292,12 +1319,6 @@ def previsao_api():
 
     # === Drivers principais ===
     drivers = gerar_drivers_principais(df, dict(zip(feature_names, data['features'])), importance_dict)
-
-    # === Salvar previsão no banco ===
-    try:
-        salvar_previsao_banco(dict(zip(feature_names, data['features'])), pred)
-    except Exception as e:
-        print("Erro ao salvar previsão (não fatal):", e)
 
     return jsonify({
         "success": True,
