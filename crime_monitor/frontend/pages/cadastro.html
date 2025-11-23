@@ -52,7 +52,7 @@
             display: flex;
             flex-direction: column;
             align-items: center;
-            width: 60%;
+            width: 100%;
             text-align: center;
             margin-top: 45px;
         }
@@ -144,6 +144,168 @@
             color: red;
             text-align: left;
         }
+        
+        /* ============================
+           MEDIA QUERIES RESPONSIVAS
+        ============================ */
+
+        /* Tablets grandes e desktops pequenos */
+        @media (max-width: 768px) {
+            .container{
+                display: block !important;
+            }
+            input, button[type="submit"]{
+                width: 110%;
+            }
+            form{
+                width: 90%;
+            }
+            .logo-box {
+                margin-top: 20px;
+                margin-bottom: 30px;
+            }
+            .login-box {
+                margin-top: 10px;
+            }
+            input, 
+            .captcha-refresh, 
+            button[type="submit"] {
+                padding: 10px 12px;
+            }
+        }
+
+        /* Tablets pequenos e smartphones grandes */
+        @media (max-width: 576px) {
+            body {
+                padding: 15px;
+            }
+            .logo-box img{
+                width: 80%;
+            }
+
+            .container {
+                max-width: 100%;
+                padding: 30px 25px;
+                border-radius: 15px;
+            }
+
+            .logo-box {
+                margin-bottom: 15px;
+            }
+            h1 {
+                margin-bottom: 15px;
+            }
+
+            input {
+                margin: 6px 0;
+                padding: 10px 12px;
+            }
+
+            .captcha-box {
+                gap: 8px;
+            }
+
+            .captcha-refresh {
+                padding: 8px 12px;
+                font-size: 1.2rem;
+            }
+
+            button[type="submit"] {
+                padding: 10px;
+                margin-top: 12px;
+            }
+
+            .cadastro-link {
+                margin-top: 12px;
+            }
+        }
+
+        /* Smartphones pequenos */
+        @media (max-width: 400px) {
+            body {
+                padding: 15px;
+            }
+            input, button{
+                width: 130%;
+            }
+            .container {
+                padding: 25px 20px;
+                border-radius: 12px;
+            }
+
+            h1 {
+                margin-bottom: 12px;
+            }
+
+            input {
+                padding: 8px 10px;
+            }
+
+            .captcha-box {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .captcha-box img {
+                width: 100%;
+            }
+
+            .captcha-refresh {
+                width: 100%;
+                padding: 10px;
+            }
+
+            button[type="submit"] {
+                padding: 10px;
+            }
+        }
+
+        /* Smartphones muito pequenos */
+        @media (max-width: 320px) {
+            .container {
+                padding: 25px 20px;
+            }
+
+            input {
+                padding: 8px;
+                font-size: 0.875rem;
+            }
+
+            .captcha-refresh {
+                font-size: 1rem;
+            }
+        }
+
+        /* Orientação paisagem em dispositivos móveis */
+        @media (max-height: 600px) and (orientation: landscape) {
+            body {
+                min-height: auto;
+                padding: 10px;
+            }
+
+            .container {
+                padding: 20px 25px;
+            }
+
+            h1 {
+                margin-bottom: 10px;
+                font-size: 1.5rem;
+            }
+
+            input {
+                margin: 5px 0;
+                padding: 8px 10px;
+            }
+
+            button[type="submit"] {
+                margin-top: 10px;
+                padding: 8px;
+            }
+
+            .cadastro-link {
+                margin-top: 10px;
+            }
+        }
     </style>
 </head>
 
@@ -160,20 +322,20 @@
 
             <form method="POST" action="/cadastro">
 
-                <label>Nome:</label>
+                <label for="nome">Nome:</label>
                 <input type="text" name="nome" placeholder="Digite seu nome" pattern="[A-Za-zÀ-ÿ\s]+"
                     title="Apenas letras são permitidas" required>
 
-                <label>Email:</label>
+                <label for="email">Email:</label>
                 <input type="email" name="email" placeholder="Digite seu email" required>
 
-                <label>Usuário:</label>
+                <label for="username">Usuário:</label>
                 <input type="text" name="username" placeholder="Escolha um usuário" required>
 
-                <label>Senha:</label>
+                <label for="password">Senha:</label>
                 <input type="password" name="password" placeholder="Digite sua senha" required>
 
-                <label>Confirmar Senha:</label>
+                <label for="confirm_password">Confirmar Senha:</label>
                 <input type="password" name="confirm_password" placeholder="Repita sua senha" required>
 
                 <button type="submit">Cadastrar</button>

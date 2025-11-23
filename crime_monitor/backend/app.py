@@ -1212,12 +1212,6 @@ def previsao_api():
     X = pd.DataFrame([data['features']], columns=feature_names)
     pred = int(round(model.predict(X)[0]))
 
-    # === Salvar previsão no banco ===
-    try:
-        salvar_previsao_banco(dict(zip(feature_names, data['features'])), pred)
-    except Exception as e:
-        print("Erro ao salvar previsão (não fatal):", e)
-
     # === Histórico real (soma por mês) ===
     df_hist = df.groupby(['ano', 'mes'])['letalidade_violenta'].sum().reset_index()
     df_hist = df_hist.sort_values(['ano', 'mes'])
@@ -1236,9 +1230,6 @@ def previsao_api():
 
     # === Buscar previsões e médias no banco de dados em uma única conexão ===
     prev_data = []
-    prev_sum_map = {}
-    prev_avg_map = {}
-    prev_labels = []
     if all([DB_NAME, DB_USER, DB_PASSWORD, DB_HOST, DB_PORT]):
         try:
             conn = psycopg2.connect(
@@ -1250,13 +1241,16 @@ def previsao_api():
             )
             cursor = conn.cursor()
             cursor.execute("""
-                SELECT ano, mes, SUM(letalidade_violenta) AS soma, AVG(letalidade_violenta) AS media
+                SELECT ano, mes, SUM(letalidade_violenta), AVG(letalidade_violenta)
                 FROM public.dados_previstos
                 GROUP BY ano, mes
                 ORDER BY ano, mes
             """)
             prev_data = cursor.fetchall()
+            prev_sum_map = {}
+            prev_avg_map = {}
             for row in prev_data:
+                prev_labels = list(prev_sum_map.keys())
                 ano = int(row[0])
                 mes = int(row[1])
                 key = f"{ano}-{mes:02d}"
@@ -1274,8 +1268,6 @@ def previsao_api():
     # alinhar previsões a todas as labels historicas
     prev_valores_alinhados = [ prev_sum_map.get(lbl, 0.0) for lbl in historico_labels ]
     media_previsoes_alinhada = [ prev_avg_map.get(lbl, 0.0) for lbl in historico_labels ]
-
-    prev_labels = [ lbl for lbl, val in zip(historico_labels, prev_valores_alinhados) if val is not None ]
 
     # === Informações do período atual ===
     mes = int(data['features'][1])
@@ -1296,6 +1288,12 @@ def previsao_api():
 
     # === Drivers principais ===
     drivers = gerar_drivers_principais(df, dict(zip(feature_names, data['features'])), importance_dict)
+
+    # === Salvar previsão no banco ===
+    try:
+        salvar_previsao_banco(dict(zip(feature_names, data['features'])), pred)
+    except Exception as e:
+        print("Erro ao salvar previsão (não fatal):", e)
 
     return jsonify({
         "success": True,

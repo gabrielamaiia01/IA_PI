@@ -52,17 +52,16 @@ document.addEventListener('DOMContentLoaded', () => {
                     },
                     {
                         label: 'Soma das previsões',
-                        data: historicoLabels.map((lbl, i) =>
-                        prevLabels.includes(lbl) ? prevValores[i] : null
+                        data: historico_labels.map((lbl, i) =>
+                        prev_labels.includes(lbl) ? prev_valores[i] : null
                         ),
                         borderColor: 'rgba(255, 165, 0, 1)',
                         backgroundColor: 'rgba(255, 165, 0, 0.2)',
                         borderDash: [5, 5],
-                        fill: false,
+                        fill: true,
                         tension: 0.3,
                         pointBackgroundColor: 'rgba(255, 165, 0, 1)',
-                        pointRadius: 4,
-                        spanGaps: false
+                        pointRadius: 3
                     },
                     {
                         label: 'Média Histórica',

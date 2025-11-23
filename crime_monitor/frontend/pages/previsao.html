@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Monitor RJ - Previsão</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined" />
+
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
         <!-- CSS local -->
     <link rel="stylesheet" href="../static/css/style.css">
@@ -23,9 +25,24 @@
             <div class="logo"> <img src="../static/img/image-removebg-preview.png" alt="Logo Monitor RJ"></div>
             <nav class="nav-menu">
                 <ul>
-                    <li><a href="/">Dashboard</a></li>
-                    <li class="active"><a href="/previsao">Previsão</a></li>
-                    <li><a href="/agrupamentos">Agrupamentos</a></li>
+                    <li>
+                        <a href="/">
+                            <span class="material-symbols-outlined">dashboard</span>
+                            Dashboard
+                        </a>
+                    </li>
+                    <li class="active">
+                        <a href="/previsao">
+                            <span class="material-symbols-outlined">trending_up</span>
+                            Previsão
+                        </a>
+                    </li>
+                    <li>
+                        <a href="/agrupamentos">
+                            <span class="material-symbols-outlined">group_work</span>
+                            Agrupamentos
+                        </a>
+                    </li>
                 </ul>
 
                 <!-- Sair no final -->
