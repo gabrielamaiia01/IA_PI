@@ -45,7 +45,7 @@ psql -U \-h \-p <5432> -W -f
 💡 Exemplo:
 
 ```bash
-psql -U postgres -h localhost -p 5432 -W -f backend/crime_bd.sql
+psql -U postgres -h localhost -p 5432 -W -f backend/db/crime_bd.sql
 ```
 
 ### 6. Crie o arquivo .env
