@@ -1,123 +1,202 @@
+<!DOCTYPE html>
 <html lang="pt-br">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cadastro - Monitor RJ</title>
-    <link rel="stylesheet" href="/static/css/style.css">
+    <title>Cadastro - Crime Monitor</title>
+
+    <!-- Google Font -->
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700&display=swap"
+        rel="stylesheet">
+
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            background: #f2f2f2;
+        * {
             margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Montserrat', sans-serif;
+        }
+
+        body {
+            background: #ffff;
             display: flex;
-            justify-content: center;
             align-items: center;
+            justify-content: center;
             height: 100vh;
         }
- 
-        .register-container {
-            background: #fff;
-            padding: 30px 40px;
-            border-radius: 10px;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
-            width: 400px;
-        }
- 
-        .register-container h2 {
+
+        .container {
+            background-color: #fff;
+            border-radius: 20px;
+            width: 98%;
+            height: 98vh;
+            padding: 3px 5px;
             text-align: center;
-            margin-bottom: 20px;
-            color: #333;
+            justify-content: space-between;
+            display: flex;
         }
- 
+
+        form{
+            display: block;
+            margin-right: 70px;
+            width: 40%;
+        }
+        .register-container,
+        .logo-box {
+            flex: 1;
+        }
+
+        .register-container {
+
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 60%;
+            text-align: center;
+            margin-top: 45px;
+        }
+
+        .logo-box {
+            display: flex;
+            justify-content: center;
+            background-color: #0059B3;
+            border-radius: 25px;
+        }
+
+        .logo-box img {
+            margin-top: 150px;
+            width: 55%;
+            height: 60%;
+
+        }
+
+        /*.register-container {
+            background-color: #fff;
+            border-radius: 20px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.25);
+            width: 60%;
+            padding: 40px 35px;
+            text-align: center;
+        }*/
+
+        h2{
+            margin-bottom: 20px;
+            color: #000000;
+            font-weight:bold;
+            text-align: left;
+        }
+
         label {
             display: block;
             margin-top: 15px;
-            font-weight: bold;
-            color: #555;
+            text-align: left;
+            font-weight: 600;
+            color: #333;
         }
- 
-        input[type="text"],
-        input[type="password"],
-        input[type="email"] {
-            width: 100%;
-            padding: 10px;
+
+        input {
+            background-color: #ffff;
+            margin: 8px 0;
+            border: none;
+            padding: 12px 15px;
+            width: 140%;
+            border-color: #003366;
+            border-bottom-style: solid;
+            border-bottom-width: initial;
             margin-top: 5px;
-            border: 1px solid #ccc;
-            border-radius: 5px;
-            box-sizing: border-box;
         }
- 
+
         button[type="submit"] {
-            width: 100%;
-            padding: 10px;
-            margin-top: 20px;
-            background: #3763bc;
+            background: #003366;
             color: white;
             border: none;
-            border-radius: 5px;
+            padding: 12px;
+            width: 140%;
+            border-radius: 25px;
+            font-size: 14px;
             cursor: pointer;
-            font-size: 16px;
+            margin-top: 20px;
+            font-weight: 600;
+            box-shadow: 5px 3px 3px #00000043;
         }
- 
+
         button[type="submit"]:hover {
-            background: #45a049;
+            background: #0056d6;
         }
- 
+
         .login-link {
-            text-align: center;
-            margin-top: 15px;
+            margin-right: 17%;
         }
- 
+
         .login-link a {
-            color: #3763bc;
+            color: #007BFF;
+            font-weight: 600;
             text-decoration: none;
         }
- 
+
         .login-link a:hover {
             text-decoration: underline;
         }
- 
+
         ul {
             margin-top: 10px;
             color: red;
+            text-align: left;
         }
     </style>
 </head>
+
 <body>
-    <div class="register-container">
-        <h2>Cadastro - Monitor RJ</h2>
-        <form method="POST" action="/cadastro">
-            <label>Nome:</label>
-            <input type="text" name="nome" placeholder="Digite seu nome" pattern="[A-Za-zÀ-ÿ\s]+" title="Apenas letras são permitidas" required>
- 
-            <label>Email:</label>
-            <input type="email" name="email" placeholder="Digite seu email" required>
- 
-            <label>Usuário:</label>
-            <input type="text" name="username" placeholder="Escolha um usuário" required>
- 
-            <label>Senha:</label>
-            <input type="password" name="password" placeholder="Digite sua senha" required>
- 
-            <label>Confirmar Senha:</label>
-            <input type="password" name="confirm_password" placeholder="Repita sua senha" required>
- 
-            <button type="submit">Cadastrar</button>
-        </form>
- 
-        <div class="login-link">
-            Já tem uma conta? <a href="/login">Faça login</a>
-        </div>
- 
-        {% with messages = get_flashed_messages() %}
-          {% if messages %}
+
+    <div class="container">
+        <div class="register-container">
+            <h2>
+                Cadastre-se para transformar </br>
+                dados em segurança</h2>
+            <div class="login-link">
+                Já tem uma conta? <a href="/login">Faça login</a>
+            </div>
+
+            <form method="POST" action="/cadastro">
+
+                <label>Nome:</label>
+                <input type="text" name="nome" placeholder="Digite seu nome" pattern="[A-Za-zÀ-ÿ\s]+"
+                    title="Apenas letras são permitidas" required>
+
+                <label>Email:</label>
+                <input type="email" name="email" placeholder="Digite seu email" required>
+
+                <label>Usuário:</label>
+                <input type="text" name="username" placeholder="Escolha um usuário" required>
+
+                <label>Senha:</label>
+                <input type="password" name="password" placeholder="Digite sua senha" required>
+
+                <label>Confirmar Senha:</label>
+                <input type="password" name="confirm_password" placeholder="Repita sua senha" required>
+
+                <button type="submit">Cadastrar</button>
+            </form>
+
+
+            {% with messages = get_flashed_messages() %}
+            {% if messages %}
             <ul>
-              {% for msg in messages %}
+                {% for msg in messages %}
                 <li>{{ msg }}</li>
-              {% endfor %}
+                {% endfor %}
             </ul>
-          {% endif %}
-        {% endwith %}
+            {% endif %}
+            {% endwith %}
+
+        </div>
+        <div class="logo-box">
+            <img src="../static/img/image-removebg-preview.png" alt="Logo Crime Monitor">
+        </div>
     </div>
+
+
 </body>
+
 </html>
