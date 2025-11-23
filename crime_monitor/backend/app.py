@@ -41,6 +41,7 @@ from db import get_connection
 from functools import wraps
 import shutil  # Para limpar arquivos temporários
 import time    # Para time.sleep em gerar_texto_gpt4o
+from datetime import datetime
 
 # ... (seus imports existentes)
 
@@ -134,7 +135,7 @@ for key, shp_path in SHAPEFILES.items():
 # =======================
 model = None
 feature_names = [
-    'cisp', 'mes', 'ano', 'mcirc', 'letalidade_violenta', 'tentat_hom', 'estupro',
+    'cisp', 'mes', 'ano', 'mcirc', 'tentat_hom', 'estupro',
     'lesao_corp_culposa', 'roubo_veiculo', 'estelionato',
     'apreensao_drogas', 'trafico_drogas', 'apf',
     'pessoas_desaparecidas', 'encontro_cadaver', 'registro_ocorrencias'
@@ -1254,7 +1255,7 @@ def previsao_api():
                 mes = int(row[1])
                 key = f"{ano}-{mes:02d}"
                 prev_sum_map[key] = float(row[2]) if row[2] is not None else 0.0
-                prev_avg_map[key] = float(row[3]) if row[3] is not None else None
+                prev_avg_map[key] = float(row[3]) if row[3] is not None else 0.0
             cursor.close()
             conn.close()
         except Exception as e:
@@ -1266,7 +1267,7 @@ def previsao_api():
 
     # alinhar previsões a todas as labels historicas
     prev_valores_alinhados = [ prev_sum_map.get(lbl, 0.0) for lbl in historico_labels ]
-    media_previsoes_alinhada = [ prev_avg_map.get(lbl, None) for lbl in historico_labels ]
+    media_previsoes_alinhada = [ prev_avg_map.get(lbl, 0.0) for lbl in historico_labels ]
 
     # === Informações do período atual ===
     mes = int(data['features'][1])
@@ -1900,7 +1901,7 @@ def gerar_descricoes_previsao(payload):
         prompt_historico = f"""
 Você é um analista de segurança pública.
 Analise a seguinte previsão de criminalidade e produza uma resposta em português:
-
+Mande em texto corrido, não em markdown.
 [PREVISÃO DE CRIMINALIDADE]
 {resumo_historico}
 """
@@ -1965,7 +1966,6 @@ Média - Histórico: {media_hist:.1f} | Previsões: {media_prev:.1f}
         print(f"Erro ao gerar descrições de previsão: {e}")
         return descricoes
 
-
 def criar_graficos_temp_previsao(payload, tmp_dir):
     """
     Cria dois gráficos:
@@ -1979,13 +1979,30 @@ def criar_graficos_temp_previsao(payload, tmp_dir):
     media_hist = payload.get("media_historica_valores", [])
     media_prev = payload.get("media_previsoes_valores", [])
     labels_hist = payload.get("historico_labels", [])
+    prev_labels = payload.get("prev_labels", [])
     feature_importance = payload.get("feature_importance", {})
+    media_prev = [
+        0 if (x is None or pd.isna(x)) else x
+        for x in media_prev
+    ]
 
-    print("historicos_valores: ", historico)
-    print("prev_valores: ", previsoes)
-    print("media_hist: ", media_hist)
-    print("media_prev: ", media_prev)
-    print("labels_hist: ", labels_hist)
+    # ---------- Conversão None → NaN ----------
+    def to_nan_list(lista):
+        return [np.nan if (v is None or v == "None") else v for v in lista]
+
+    previsoes = to_nan_list(previsoes)
+    media_hist = to_nan_list(media_hist)
+    media_prev = to_nan_list(media_prev)
+
+    # ---------- Garantir alinhamentos ----------
+    # Se media_hist for menor que histórico, completa com NaN no início
+    if len(media_hist) < len(historico):
+        diff = len(historico) - len(media_hist)
+        media_hist = [np.nan] * diff + media_hist
+
+    # Função auxiliar para converter "YYYY-MM" em datetime
+    def to_date(label_list):
+        return [datetime.strptime(x, "%Y-%m") for x in label_list]
 
     # ===============================
     # 1️⃣ Gráfico: Histórico vs Previsões — Soma e Média
@@ -1993,39 +2010,71 @@ def criar_graficos_temp_previsao(payload, tmp_dir):
     if historico:
         plt.figure(figsize=(10, 6))
 
-        # Série 1: soma histórica
-        plt.plot(labels_hist, historico, label="Soma Histórica", linewidth=2)
+        hist_dates = to_date(labels_hist)
+        prev_dates = to_date(prev_labels)
 
-        # Série 2: soma prevista (se existir)
-        if previsoes:
-            plt.plot(labels_hist[-len(previsoes):], previsoes,
-                     label="Soma Prevista", linestyle="--", linewidth=2)
+        # ------------------------------
+        # Linha: Soma Histórica (azul)
+        # ------------------------------
+        plt.plot(
+            hist_dates,
+            historico,
+            label="Soma Histórica",
+            linewidth=2,
+            color="#1f77b4"
+        )
 
-        # Série 3: médias (só adiciona se existirem)
+        # ------------------------------
+        # Pontos: Soma Prevista (vermelho)
+        # ------------------------------
+        previsoes_clean = [(d, v) for d, v in zip(prev_dates, previsoes) if not np.isnan(v)]
+        if previsoes_clean:
+            plt.scatter(
+                [d for d, _ in previsoes_clean],
+                [v for _, v in previsoes_clean],
+                label="Soma Prevista",
+                color="#d62728"
+            )
+
+        # ------------------------------
+        # Linha: Média Histórica (verde)
+        # ------------------------------
         if media_hist:
-            plt.plot(labels_hist, media_hist, label="Média Histórica", linewidth=2, alpha=0.7)
-        if media_prev:
-            plt.plot(labels_hist[-len(media_prev):], media_prev,
-                     label="Média Prevista", linestyle="--", linewidth=2, alpha=0.7)
+            plt.plot(
+                hist_dates,
+                media_hist,
+                label="Média Histórica",
+                linewidth=2,
+                alpha=0.7,
+                color="#2ca02c"
+            )
+
+        # ------------------------------
+        # Pontos: Média Prevista (laranja)
+        # ------------------------------
+        media_prev_clean = [(d, v) for d, v in zip(prev_dates, media_prev) if not np.isnan(v)]
+        if media_prev_clean:
+            plt.scatter(
+                [d for d, _ in media_prev_clean],
+                [v for _, v in media_prev_clean],
+                label="Média Prevista",
+                alpha=0.7,
+                color="#ff7f0e"
+            )
+        else:
+            print("⚠ Média Prevista NÃO possui valores válidos (todos são None/NaN).")
 
         plt.title("Histórico vs Previsões — Soma e Média ao longo do tempo", fontsize=14)
         plt.xlabel("Período (Ano-Mês)")
         plt.ylabel("Número de Casos")
         plt.legend()
         plt.grid(True, linestyle="--", alpha=0.6)
-
-        # --- 🔹 Mostrar apenas alguns rótulos no eixo X ---
-        if len(labels_hist) > 12:
-            passo = max(1, len(labels_hist) // 12)  # mostra ~12 rótulos no máximo
-            plt.xticks(range(0, len(labels_hist), passo), labels_hist[::passo], rotation=45, ha='right')
-        else:
-            plt.xticks(range(len(labels_hist)), labels_hist, rotation=45, ha='right')
-
-        plt.tight_layout()
+        plt.gcf().autofmt_xdate()
 
         caminho = os.path.join(tmp_dir, "historico_previsoes_soma_media.png")
         plt.savefig(caminho, dpi=150)
         plt.close()
+
         saved["historico_previsoes_soma_media"] = caminho
 
     # ===============================
@@ -2049,6 +2098,7 @@ def criar_graficos_temp_previsao(payload, tmp_dir):
         caminho = os.path.join(tmp_dir, "contribuicao_fatores.png")
         plt.savefig(caminho, dpi=150)
         plt.close()
+
         saved["feature_importance"] = caminho
 
     return saved
