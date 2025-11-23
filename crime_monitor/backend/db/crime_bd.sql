@@ -1,6 +1,3 @@
-crimes db: 
- 
- 
 CREATE DATABASE crimes;
  
 \c crimes
@@ -12,6 +9,7 @@ CREATE TABLE IF NOT EXISTS dados_previstos
     mcirc bigint NOT NULL,
     mes smallint NOT NULL,
     ano integer NOT NULL,
+    letalidade_violenta integer,
     tentat_hom integer,
     estupro integer,
     lesao_corp_culposa integer,
@@ -33,6 +31,7 @@ CREATE TABLE IF NOT EXISTS dados_reais
     mcirc bigint NOT NULL,
     mes smallint NOT NULL,
     ano integer NOT NULL,
+    letalidade_violenta integer,
     tentat_hom integer,
     estupro integer,
     lesao_corp_culposa integer,
@@ -52,7 +51,7 @@ CREATE TABLE IF NOT EXISTS users (
     nome VARCHAR(100) NOT NULL,
     email VARCHAR(150) UNIQUE NOT NULL,
     username VARCHAR(50) UNIQUE NOT NULL,
-    password VARCHAR(255) NOT NULL,
+    password VARCHAR(255) NOT NULL
 );
  
 INSERT INTO users (nome, email, username, password)
