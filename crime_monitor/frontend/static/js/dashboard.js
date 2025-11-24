@@ -124,7 +124,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                     datasets: [{
                         label: 'Correlação com Letalidade Violenta',
                         data: values,
-                        backgroundColor: values.map(v => v >= 0 ? 'rgba(68, 78, 224, 0.7)' : 'rgba(0, 17, 255, 0.7)')
+                        backgroundColor: values.map(v => v >= 0 ? 'rgba(0, 17, 255, 0.7)' : 'rgba(255, 17, 255, 0.7)')
                     }]
                 },
                 options: {
