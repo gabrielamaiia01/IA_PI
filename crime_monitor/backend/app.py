@@ -1847,7 +1847,7 @@ def login():
         cur = conn.cursor()
 
         # Validação do usuário no banco
-        cur.execute("SELECT * FROM users WHERE username=%s AND password=%s",
+        cur.execute("SELECT * FROM public.users WHERE username=%s AND password=%s",
                     (username, password))
         user = cur.fetchone()
 
