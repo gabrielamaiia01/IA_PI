@@ -1,4 +1,4 @@
-Flask
+Flask==3.0.0
 pandas
 numpy
 geopandas
@@ -11,4 +11,4 @@ requests
 reportlab
 lightgbm
 captcha
-guicorn
+guicorn==21.2.0
