@@ -1802,7 +1802,7 @@ def cadastro():
            
             # Inserção na tabela users
             cur.execute("""
-                INSERT INTO users (nome, email, username, password)
+                INSERT INTO public.users (nome, email, username, password)
                 VALUES (%s, %s, %s, %s)
             """, (nome, email, username, password))
  
