@@ -1077,6 +1077,12 @@ def dashboard_data():
         "scatter_data": scatter_data
     }))
 
+# Ignorar captcha quando em TEST_MODE
+@app.before_request
+def desabilitar_captcha_em_teste():
+    if os.environ.get("TEST_MODE") == "1":
+        session['captcha_text'] = "TESTE"
+
 @app.route('/api/medias')
 @login_required
 def api_medias():
@@ -1834,40 +1840,45 @@ def cadastro():
  
 @app.route('/login', methods=['GET', 'POST'])
 def login():
-        if request.method == 'POST':
-            username = request.form.get('username')
-            password = request.form.get('password')
-            user_captcha = request.form.get('captcha', '').upper()  # pega captcha digitado
- 
-            # validação do captcha
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
+        user_captcha = request.form.get('captcha', '').upper()
+
+        # SE ESTIVER EM TEST_MODE, PULA O CAPTCHA
+        if os.getenv("TEST_MODE") == "1":
+            print("⚠ TEST_MODE ATIVO → Ignorando captcha do login!")
+        else:
+            # Validação real do captcha
             if user_captcha != session.get('captcha_text', ''):
                 flash("Captcha incorreto!")
                 return redirect(url_for('login'))
- 
-            # Conectar ao banco de dadospsql -U postgres -h localhost -d crimes
 
-            conn = psycopg2.connect(
-                    dbname=DB_NAME,
-                    user=DB_USER,
-                    password=DB_PASSWORD,
-                    host=DB_HOST,
-                    port=DB_PORT
-                )
-            cur = conn.cursor()
-            # validação do usuário no banco
-            cur.execute("SELECT * FROM users WHERE username=%s AND password=%s", (username, password))
-            user = cur.fetchone()
-            if not user:
-                flash("Usuário ou senha incorretos!")
-                return redirect(url_for('login'))
- 
-            # login bem-sucedido
-            session['user_id'] = user[0]
-            flash("Login realizado com sucesso!")
-            return redirect(url_for('index'))
- 
-        return render_template('login.html')
+        # Conectar ao banco de dados
+        conn = psycopg2.connect(
+            dbname=DB_NAME,
+            user=DB_USER,
+            password=DB_PASSWORD,
+            host=DB_HOST,
+            port=DB_PORT
+        )
+        cur = conn.cursor()
 
+        # Validação do usuário no banco
+        cur.execute("SELECT * FROM users WHERE username=%s AND password=%s",
+                    (username, password))
+        user = cur.fetchone()
+
+        if not user:
+            flash("Usuário ou senha incorretos!")
+            return redirect(url_for('login'))
+
+        session['user_id'] = user[0]
+        flash("Login realizado com sucesso!")
+        return redirect(url_for('index'))
+
+    return render_template('login.html')
+    
 def gerar_descricoes_previsao(payload):
     """
     Gera descrições automáticas para a página de previsão.

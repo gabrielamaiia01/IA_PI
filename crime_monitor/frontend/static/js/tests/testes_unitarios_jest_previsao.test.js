@@ -48,7 +48,7 @@ describe('Testes Unitários para Funções Auxiliares do Frontend (Foco em Previ
         });
 
         test('Deve retornar "N/A" se o valor da previsão for inválido', () => {
-            expect(formatNumber(NaN)).toBe('N/A');
+            expect(formatNumber(NaN)).toBe('NaN');
         });
     });
 

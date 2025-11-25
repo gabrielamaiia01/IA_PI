@@ -1,166 +1,163 @@
 from selenium import webdriver
 from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import Select
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.options import Options
 import time
 
-# Configuração do WebDriver (necessário ter o ChromeDriver instalado e no PATH)
+BASE_URL = "http://127.0.0.1:5000"
+
 def setup_driver():
     chrome_options = Options()
     chrome_options.add_argument("--headless")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
-    # Em um ambiente real, você precisaria do caminho exato para o ChromeDriver
-    driver = webdriver.Chrome(options=chrome_options)
-    return driver
+    return webdriver.Chrome(options=chrome_options)
 
-# URL base do aplicativo Flask (assumindo que está rodando na porta 5000)
-BASE_URL = "http://127.0.0.1:5000"
 
-# Teste Básico (Exemplo 4)
+# --- LOGIN AUTOMÁTICO ---
+def fazer_login(driver):
+    print("Realizando login...")
+
+    driver.get(BASE_URL + "/login")
+    WebDriverWait(driver, 10).until(
+        EC.presence_of_element_located((By.NAME, "username"))
+    )
+
+    driver.find_element(By.NAME, "username").send_keys("elias")
+    driver.find_element(By.NAME, "password").send_keys("123456")
+    driver.find_element(By.NAME, "captcha").send_keys("TESTE")
+
+    driver.find_element(By.CSS_SELECTOR, "button[type='submit']").click()
+
+    WebDriverWait(driver, 10).until(
+        lambda d: (
+            "/dashboard" in d.current_url
+            or "/index" in d.current_url
+            or d.current_url.endswith("/")
+        )
+    )
+
+    print("Login realizado com sucesso!\n")
+
+
+# ---------------- TESTE 1 ----------------
 def test_acesso_pagina_inicial():
-    """
-    Teste Básico: Acessa a página inicial e verifica o título.
-    """
     driver = setup_driver()
-    print("\n--- Teste Básico: Acesso à Página Inicial ---")
     try:
+        fazer_login(driver)
+
         driver.get(BASE_URL + "/")
-        time.sleep(2)
-        assert "Monitor RJ - Dashboard" in driver.title
-        print("Sucesso: Página inicial acessada e título verificado.")
-    except Exception as e:
-        print(f"Falha: {e}")
+        assert "Monitor RJ" in driver.title
+        print("✔ Teste 1 OK: Página inicial acessada.\n")
+
     finally:
         driver.quit()
 
-# --- Fluxo 1: Teste de Filtragem no Dashboard ---
+
+# ---------------- TESTE 2 ----------------
 def test_fluxo_filtragem_dashboard():
-    """
-    Fluxo 1: Simula a filtragem de dados no Dashboard.
-    (Assume a existência de campos de filtro no HTML)
-    """
     driver = setup_driver()
-    print("\n--- Fluxo 1: Teste de Filtragem no Dashboard ---")
     try:
+        fazer_login(driver)
+
         driver.get(BASE_URL + "/")
-        time.sleep(2)
+        WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.ID, "data-inicio"))
+        )
 
-        # 1. Preenche Período (Simulando seleção de Ano/Mês)
-        # Usando o seletor existente no index.html
-        periodo_select = Select(driver.find_element(By.ID, "periodo"))
-        periodo_select.select_by_visible_text("Ano/Mês") # Seleciona a opção padrão (simulação)
-        print("Passo 1: Período preenchido.")
+        driver.find_element(By.ID, "data-inicio").send_keys("2023-01-01")
+        driver.find_element(By.ID, "data-fim").send_keys("2023-12-31")
+        driver.find_element(By.ID, "municipio").send_keys("Rio de Janeiro")
 
-        # 2. Seleciona Região (Simulando seleção de Município/Bairro)
-        regiao_select = Select(driver.find_element(By.ID, "regiao"))
-        regiao_select.select_by_visible_text("Município / Bairro") # Seleciona a opção padrão (simulação)
-        print("Passo 2: Região selecionada.")
+        driver.find_element(By.ID, "btn-aplicar").click()
 
-        # 3. Clica em "Filtrar" (Simulação: Não há botão explícito, mas a mudança de filtro deve acionar)
-        # Em um app real, haveria um botão. Aqui, simulamos que a mudança de select já é o filtro.
-        print("Passo 3: Simulação de clique em 'Filtrar' (Mudança de filtro acionada).")
+        kpi = WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.ID, "total_letalidade"))
+        )
 
-        # 4. Verifica se o dashboard é atualizado (Simulação: Verifica se os KPIs ainda estão visíveis)
-        kpi_element = driver.find_element(By.ID, "total_letalidade")
-        assert kpi_element.is_displayed()
-        print(f"Passo 4: Dashboard visível. KPI Letalidade Total: {kpi_element.text}")
+        assert kpi.is_displayed(), "KPI não encontrado!"
 
-        print("Sucesso: Fluxo de Filtragem concluído.")
+        print("✔ Teste 2 OK: Dashboard filtrado e KPIs carregados.\n")
 
-    except Exception as e:
-        print(f"Falha: {e}")
     finally:
         driver.quit()
 
-# --- Fluxo 2: Teste de Geração de Previsão (Simulando Relatório) ---
+
+# ---------------- TESTE 3 ----------------
 def test_fluxo_geracao_previsao():
-    """
-    Fluxo 2: Simula a geração de relatório/previsão na página de Previsão.
-    """
     driver = setup_driver()
-    print("\n--- Fluxo 2: Teste de Geração de Previsão ---")
     try:
+        fazer_login(driver)
+
         driver.get(BASE_URL + "/previsao")
-        time.sleep(2)
 
-        # 1. Seleciona Período Futuro
-        periodo_select = Select(driver.find_element(By.ID, "periodo-futuro"))
-        periodo_select.select_by_visible_text("Próximo mês")
-        print("Passo 1: Período futuro selecionado.")
+        wait = WebDriverWait(driver, 20)
 
-        # 2. Seleciona Região
-        regiao_select = Select(driver.find_element(By.ID, "regiao-previsao"))
-        regiao_select.select_by_visible_text("Estado do RJ")
-        print("Passo 2: Região selecionada.")
+        # Preencher formulário
+        wait.until(EC.presence_of_element_located((By.ID, "cisp")))
 
-        # 3. Clica em "Gerar Previsão"
-        generate_button = driver.find_element(By.CLASS_NAME, "generate-button")
-        generate_button.click()
-        time.sleep(3) # Espera a "geração"
+        driver.find_element(By.ID, "cisp").send_keys("001")
+        driver.find_element(By.ID, "mes").send_keys("8")
+        driver.find_element(By.ID, "ano").send_keys("2025")
+        driver.find_element(By.ID, "mcirc").send_keys("Rio de Janeiro")
+        driver.find_element(By.ID, "tentat_hom").send_keys("15")
+        driver.find_element(By.ID, "lesao_corp_culposa").send_keys("25")
+        driver.find_element(By.ID, "roubo_veiculo").send_keys("120")
+        driver.find_element(By.ID, "registro_ocorrencias").send_keys("850")
 
-        # 4. Verifica se os detalhes da previsão foram carregados (Simulação de relatório)
-        previsao_kpi = driver.find_element(By.ID, "previsao_leitura")
-        assert previsao_kpi.text != "" and previsao_kpi.text != "1.190" # Verifica se o valor foi carregado (e não é o mock inicial)
-        print(f"Passo 4: Previsão gerada e KPI visível: {previsao_kpi.text}")
+        driver.find_element(By.ID, "generate-btn").click()
 
-        print("Sucesso: Fluxo de Geração de Previsão concluído.")
+        # ESPERAR a previsão aparecer (texto diferente de "-")
+        print("Aguardando previsão...")
+        previsao_element = wait.until(
+            EC.presence_of_element_located((By.ID, "previsao_leitura"))
+        )
 
-    except Exception as e:
-        print(f"Falha: {e}")
+        wait.until(lambda d: previsao_element.text.strip() != "-")
+
+        previsao = previsao_element.text.strip()
+        print("Previsão capturada:", previsao)
+
+        assert previsao != "" and previsao != "-", "A previsão não foi gerada!"
+
+        print("✔ Teste 3 OK: Previsão gerada.\n")
+
     finally:
         driver.quit()
 
-# --- Fluxo 3: Teste de Comportamento em Caso de Filtro Vazio ---
+
+# ---------------- TESTE 4 ----------------
 def test_fluxo_filtro_vazio():
-    """
-    Fluxo 3: Testa o comportamento ao tentar gerar previsão com filtros vazios/padrão.
-    (Assume que o app.py não tem validação, mas o teste verifica o estado inicial)
-    """
     driver = setup_driver()
-    print("\n--- Fluxo 3: Teste de Comportamento com Filtro Vazio ---")
     try:
+        fazer_login(driver)
+
         driver.get(BASE_URL + "/previsao")
-        time.sleep(2)
 
-        # 1. Deixa os campos com os valores padrão (simulando vazio)
-        periodo_select = Select(driver.find_element(By.ID, "periodo-futuro"))
-        regiao_select = Select(driver.find_element(By.ID, "regiao-previsao"))
-        
-        # Assume que a primeira opção é a "vazia" ou padrão
-        periodo_select.select_by_index(0)
-        regiao_select.select_by_index(0)
-        print("Passo 1: Filtros deixados no estado padrão/vazio.")
+        wait = WebDriverWait(driver, 10)
 
-        # 2. Captura o valor inicial do KPI de previsão
-        initial_kpi_text = driver.find_element(By.ID, "previsao_leitura").text
-        print(f"Passo 2: KPI inicial: {initial_kpi_text}")
+        valor_inicial = wait.until(
+            EC.presence_of_element_located((By.ID, "previsao_leitura"))
+        ).text
 
-        # 3. Clica em "Gerar Previsão"
-        generate_button = driver.find_element(By.CLASS_NAME, "generate-button")
-        generate_button.click()
-        time.sleep(3)
+        driver.find_element(By.ID, "generate-btn").click()
 
-        # 4. Verifica se o valor do KPI não mudou (Simulação de que a validação impediu a chamada)
-        # Em um app real, verificaríamos uma mensagem de erro ou um pop-up.
-        final_kpi_text = driver.find_element(By.ID, "previsao_leitura").text
-        
-        # O teste passa se o valor for o mesmo (indicando que a previsão não foi gerada)
-        # ou se uma mensagem de erro for exibida (que não podemos verificar sem o código real).
-        # Aqui, verificamos se o valor é o mesmo, simulando falha na geração.
-        assert initial_kpi_text == final_kpi_text
-        print("Passo 4: Sucesso (Simulado): O valor do KPI não mudou, indicando que a previsão não foi gerada com filtros vazios.")
+        time.sleep(1)
 
-        print("Sucesso: Fluxo de Filtro Vazio concluído.")
+        valor_final = driver.find_element(By.ID, "previsao_leitura").text
 
-    except Exception as e:
-        print(f"Falha: {e}")
+        assert valor_inicial == valor_final, "Filtro vazio deveria manter o valor!"
+
+        print("✔ Teste 4 OK: Filtro vazio não gerou previsão.\n")
+
     finally:
         driver.quit()
 
 
-        if __name__ == "__main__":
-          test_acesso_pagina_inicial()
-          test_fluxo_filtragem_dashboard()
-          test_fluxo_geracao_previsao()
-          test_fluxo_filtro_vazio()
+# ---------------- MAIN ----------------
+if __name__ == "__main__":
+    test_acesso_pagina_inicial()
+    test_fluxo_filtragem_dashboard()
+    test_fluxo_geracao_previsao()
+    test_fluxo_filtro_vazio()
