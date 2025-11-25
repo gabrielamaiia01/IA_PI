@@ -3,6 +3,7 @@ import psycopg2
 import os
 import pandas as pd
 from dotenv import load_dotenv
+from urllib.parse import urlparse
  
 # === 1. Carregar variáveis do arquivo .env ===
 load_dotenv()
@@ -13,33 +14,19 @@ DB_PASSWORD = os.getenv("DB_PASSWORD")
 DB_HOST = os.getenv("DB_HOST")
 DB_PORT = os.getenv("DB_PORT")
  
- 
 def get_connection():
-    DATABASE_URL = os.getenv("DATABASE_URL")
-
-    # Se DATABASE_URL existir → estamos no Render (deploy)
-    if DATABASE_URL:
-        up.uses_netloc.append("postgres")
-        url = up.urlparse(DATABASE_URL)
-
-        return psycopg2.connect(
-            database=url.path[1:],
-            user=url.username,
-            password=url.password,
-            host=url.hostname,
-            port=url.port
-        )
-
-    # Caso contrário → usar as variáveis locais
-    else:
-        return psycopg2.connect(
-            dbname=os.getenv("DB_NAME"),
-            user=os.getenv("DB_USER"),
-            password=os.getenv("DB_PASSWORD"),
-            host=os.getenv("DB_HOST"),
-            port=os.getenv("DB_PORT"),
-        )
- 
+    database_url = os.getenv("DATABASE_URL")
+    if database_url:
+        return psycopg2.connect(database_url)
+    
+    # fallback local
+    return psycopg2.connect(
+        dbname=os.getenv("DB_NAME"),
+        user=os.getenv("DB_USER"),
+        password=os.getenv("DB_PASSWORD"),
+        host=os.getenv("DB_HOST"),
+        port=os.getenv("DB_PORT")
+    )
  
 def load_csv():
     """Carrega o CSV de forma segura"""
