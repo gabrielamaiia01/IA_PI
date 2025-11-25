@@ -2236,8 +2236,3 @@ def export_previsao_pdf():
 
     return send_file(buffer, as_attachment=True, download_name='relatorio_previsao.pdf', mimetype='application/pdf')
   
-# ===========================
-# Main
-# ===========================
-if __name__ == "__main__":
-    app.run(host=IP_OR_HOST, port=5000, debug=True)
