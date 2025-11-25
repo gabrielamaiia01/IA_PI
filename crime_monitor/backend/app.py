@@ -1202,7 +1202,7 @@ def model_features():
 @login_required
 def previsao_api():
     global model
-    df = load_data()
+    df = load_data()  # Função que carrega os dados históricos
     data = request.get_json()
 
     if not model:
@@ -1216,20 +1216,25 @@ def previsao_api():
     df_hist = df.groupby(['ano', 'mes'])['letalidade_violenta'].sum().reset_index()
     df_hist = df_hist.sort_values(['ano', 'mes'])
 
+    # === Intervalo de confiança via bootstrap ===
     preds_boot = []
     for _ in range(1000):
         sample = df_hist['letalidade_violenta'].sample(len(df_hist), replace=True)
         preds_boot.append(pred + (sample.mean() - df_hist['letalidade_violenta'].mean()))
     lower = max(np.percentile(preds_boot, 2.5), 0)
     upper = np.percentile(preds_boot, 97.5)
-    
+
     # === Média histórica mensal ===
     df_hist_media = df.groupby(['ano', 'mes'])['letalidade_violenta'].mean().reset_index()
     df_hist_media = df_hist_media.sort_values(['ano', 'mes'])
     media_historica_valores = df_hist_media['letalidade_violenta'].tolist()
 
-    # === Buscar previsões e médias no banco de dados em uma única conexão ===
-    prev_data = []
+    # === Inicializa previsões e labels (seguro) ===
+    prev_sum_map = {}
+    prev_avg_map = {}
+    prev_labels = []
+
+    # === Buscar previsões do banco ===
     if all([DB_NAME, DB_USER, DB_PASSWORD, DB_HOST, DB_PORT]):
         try:
             conn = get_connection()
@@ -1241,15 +1246,13 @@ def previsao_api():
                 ORDER BY ano, mes
             """)
             prev_data = cursor.fetchall()
-            prev_sum_map = {}
-            prev_avg_map = {}
             for row in prev_data:
-                prev_labels = list(prev_sum_map.keys())
                 ano = int(row[0])
                 mes = int(row[1])
                 key = f"{ano}-{mes:02d}"
                 prev_sum_map[key] = float(row[2]) if row[2] is not None else 0.0
                 prev_avg_map[key] = float(row[3]) if row[3] is not None else 0.0
+            prev_labels = list(prev_sum_map.keys())
             cursor.close()
             conn.close()
         except Exception as e:
@@ -1259,9 +1262,9 @@ def previsao_api():
     historico_labels = [f"{int(a)}-{int(m):02d}" for a, m in zip(df_hist['ano'], df_hist['mes'])]
     historico_valores = df_hist['letalidade_violenta'].tolist()
 
-    # alinhar previsões a todas as labels historicas
-    prev_valores_alinhados = [ prev_sum_map.get(lbl, 0.0) for lbl in historico_labels ]
-    media_previsoes_alinhada = [ prev_avg_map.get(lbl, 0.0) for lbl in historico_labels ]
+    # === Alinha previsões com histórico (mesmo que não haja dados no banco) ===
+    prev_valores_alinhados = [prev_sum_map.get(lbl, 0.0) for lbl in historico_labels]
+    media_previsoes_alinhada = [prev_avg_map.get(lbl, 0.0) for lbl in historico_labels]
 
     # === Informações do período atual ===
     mes = int(data['features'][1])
@@ -1283,12 +1286,13 @@ def previsao_api():
     # === Drivers principais ===
     drivers = gerar_drivers_principais(df, dict(zip(feature_names, data['features'])), importance_dict)
 
-    # === Salvar previsão no banco ===
+    # === Salvar previsão no banco (não fatal) ===
     try:
         salvar_previsao_banco(dict(zip(feature_names, data['features'])), pred)
     except Exception as e:
         print("Erro ao salvar previsão (não fatal):", e)
 
+    # === Retorna JSON com todas as informações ===
     return jsonify({
         "success": True,
         "previsao_leitura": pred,
@@ -2236,3 +2240,10 @@ def export_previsao_pdf():
 
     return send_file(buffer, as_attachment=True, download_name='relatorio_previsao.pdf', mimetype='application/pdf')
   
+if __name__ == "__main__":
+    # TESTA SE ESTÁ RODANDO LOCALMENTE
+    if os.getenv("RENDER") != "true":  # Render define a variável de ambiente RENDER=true
+        host = os.getenv("IP_OR_HOST", "127.0.0.1")
+        port = int(os.getenv("PORT", 5000))
+        debug = os.getenv("FLASK_DEBUG", "1") == "1"
+        app.run(host=host, port=port, debug=debug)
