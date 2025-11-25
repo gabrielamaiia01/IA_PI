@@ -36,11 +36,17 @@ import json
 
 
 import re
-if os.getenv("RENDER") == "true": 
+import os
+import sys
+
+# adiciona o diretório raiz ao path para resolver imports
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
+if os.getenv("RENDER") == "true":
     from backend.db import get_connection
 else:
     from db import get_connection
-    
+
 from functools import wraps
 import shutil  # Para limpar arquivos temporários
 import time    # Para time.sleep em gerar_texto_gpt4o
