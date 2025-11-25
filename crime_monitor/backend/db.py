@@ -15,14 +15,30 @@ DB_PORT = os.getenv("DB_PORT")
  
  
 def get_connection():
-    """Retorna uma conexão com o banco de dados PostgreSQL"""
-    return psycopg2.connect(
-        dbname=DB_NAME,
-        user=DB_USER,
-        password=DB_PASSWORD,
-        host=DB_HOST,
-        port=DB_PORT
-    )
+    DATABASE_URL = os.getenv("DATABASE_URL")
+
+    # Se DATABASE_URL existir → estamos no Render (deploy)
+    if DATABASE_URL:
+        up.uses_netloc.append("postgres")
+        url = up.urlparse(DATABASE_URL)
+
+        return psycopg2.connect(
+            database=url.path[1:],
+            user=url.username,
+            password=url.password,
+            host=url.hostname,
+            port=url.port
+        )
+
+    # Caso contrário → usar as variáveis locais
+    else:
+        return psycopg2.connect(
+            dbname=os.getenv("DB_NAME"),
+            user=os.getenv("DB_USER"),
+            password=os.getenv("DB_PASSWORD"),
+            host=os.getenv("DB_HOST"),
+            port=os.getenv("DB_PORT"),
+        )
  
  
 def load_csv():

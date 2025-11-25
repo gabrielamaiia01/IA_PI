@@ -1,5 +1,3 @@
-
-
 function formatNumber(number) {
     if (typeof number !== 'number') {
         return 'N/A';

@@ -260,18 +260,12 @@ def classificar_risco(pred, df):
 
 def salvar_previsao_banco(features_dict, prediction_value):
     # se as variáveis de conexão não estiverem setadas, sai sem erro
-    if not all([DB_NAME, DB_USER, DB_PASSWORD, DB_HOST, DB_PORT]):
+    if not all([DB_NAME, DB_USER, DB_PASSWORD, DB_HOST, DB_PORT, DATABASE_URL]):
         print("Parâmetros do DB ausentes — pulando salvamento no banco.")
         return
 
     try:
-        conn = psycopg2.connect(
-            dbname=DB_NAME,
-            user=DB_USER,
-            password=DB_PASSWORD,
-            host=DB_HOST,
-            port=DB_PORT
-        )
+        conn = get_connection()
         cursor = conn.cursor()
         cursor.execute("""
             INSERT INTO public.dados_previstos
@@ -1238,13 +1232,7 @@ def previsao_api():
     prev_data = []
     if all([DB_NAME, DB_USER, DB_PASSWORD, DB_HOST, DB_PORT]):
         try:
-            conn = psycopg2.connect(
-                dbname=DB_NAME,
-                user=DB_USER,
-                password=DB_PASSWORD,
-                host=DB_HOST,
-                port=DB_PORT
-            )
+            conn = get_connection()
             cursor = conn.cursor()
             cursor.execute("""
                 SELECT ano, mes, SUM(letalidade_violenta), AVG(letalidade_violenta)
@@ -1855,13 +1843,7 @@ def login():
                 return redirect(url_for('login'))
 
         # Conectar ao banco de dados
-        conn = psycopg2.connect(
-            dbname=DB_NAME,
-            user=DB_USER,
-            password=DB_PASSWORD,
-            host=DB_HOST,
-            port=DB_PORT
-        )
+        conn = get_connection()
         cur = conn.cursor()
 
         # Validação do usuário no banco
