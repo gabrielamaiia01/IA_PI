@@ -36,7 +36,7 @@ import json
 
 
 import re
-from db import get_connection
+from backend.db import get_connection
 
 from functools import wraps
 import shutil  # Para limpar arquivos temporários
