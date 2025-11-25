@@ -36,8 +36,11 @@ import json
 
 
 import re
-from backend.db import get_connection
-
+if os.getenv("RENDER") == "true": 
+    from backend.db import get_connection
+else:
+    from db import get_connection
+    
 from functools import wraps
 import shutil  # Para limpar arquivos temporários
 import time    # Para time.sleep em gerar_texto_gpt4o
@@ -1606,8 +1609,8 @@ def predizer_cluster():
 
         k = int(data.get("k", 4))
         feature_names_cluster= [
-            'cisp', 'mes', 'ano', 'mcirc', 'tentat_hom', 'estupro',
-            'lesao_corp_culposa', 'roubo_veiculo', 'estelionato',
+            'cisp', 'mes', 'ano', 'mcirc', 'letalidade_violenta','tentat_hom', 
+            'estupro', 'lesao_corp_culposa', 'roubo_veiculo', 'estelionato',
             'apreensao_drogas', 'trafico_drogas', 'apf',
             'pessoas_desaparecidas', 'encontro_cadaver', 'registro_ocorrencias'
         ]
