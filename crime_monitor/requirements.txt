@@ -11,4 +11,4 @@ requests
 reportlab
 lightgbm
 captcha
-guicorn==21.2.0
+gunicorn==21.2.0
