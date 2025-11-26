@@ -238,6 +238,23 @@ def gerar_drivers_principais(df, features_dict, importance_dict):
         drivers.append(frase)
 
     return ", ".join(drivers)
+    
+def classificar_tendencia(pred, media_mes_proximo):
+    if media_mes_proximo is None or media_mes_proximo == 0:
+        return "Sem dados suficientes"
+
+    diff_ratio = (pred - media_mes_proximo) / media_mes_proximo
+
+    if diff_ratio <= -0.2:
+        return "Queda significativa"
+    elif diff_ratio <= -0.05:
+        return "Leve queda"
+    elif diff_ratio < 0.05:
+        return "Estável"
+    elif diff_ratio < 0.2:
+        return "Leve aumento"
+    else:
+        return "Aumento significativo"
 
 def classificar_risco(pred, df):
     vals = df['letalidade_violenta'][df['letalidade_violenta'] > 0]
