@@ -98,7 +98,7 @@ DB_HOST = os.getenv("DB_HOST")
 DB_PORT = os.getenv("DB_PORT")
 OPENROUTER_API_KEY= os.getenv("OPENROUTER_API_KEY")
 IP_OR_HOST= os.getenv("IP_OR_HOST")
-
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 # ===========================
 # Paths e configurações
@@ -271,21 +271,23 @@ def classificar_risco(pred, df):
     else:
         return "Alto"
 
-
 def salvar_previsao_banco(features_dict, prediction_value):
-    # se as variáveis de conexão não estiverem setadas, sai sem erro
-    if not all([DB_NAME, DB_USER, DB_PASSWORD, DB_HOST, DB_PORT, DATABASE_URL]):
-        print("Parâmetros do DB ausentes — pulando salvamento no banco.")
+
+    # Se não houver nem DATABASE_URL nem configurações locais, não salva
+    if not DATABASE_URL and not all([DB_NAME, DB_USER, DB_PASSWORD, DB_HOST, DB_PORT]):
+        print("Configurações de banco ausentes — pulando salvamento no banco.")
         return
 
     try:
         conn = get_connection()
         cursor = conn.cursor()
+
         cursor.execute("""
             INSERT INTO public.dados_previstos
             (cisp, mcirc, mes, ano, letalidade_violenta, tentat_hom, estupro,
              lesao_corp_culposa, roubo_veiculo, estelionato, apreensao_drogas,
-             trafico_drogas, apf, pessoas_desaparecidas, encontro_cadaver, registro_ocorrencias)
+             trafico_drogas, apf, pessoas_desaparecidas, encontro_cadaver,
+             registro_ocorrencias)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """, (
             int(features_dict['cisp']),
@@ -305,10 +307,12 @@ def salvar_previsao_banco(features_dict, prediction_value):
             int(features_dict.get('encontro_cadaver', 0)),
             int(features_dict.get('registro_ocorrencias', 0))
         ))
+
         conn.commit()
         cursor.close()
         conn.close()
         print("Previsão inserida com sucesso no banco!")
+
     except Exception as e:
         print("Erro ao inserir previsão no banco:", e)
 

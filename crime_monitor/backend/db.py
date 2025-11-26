@@ -15,9 +15,9 @@ DB_HOST = os.getenv("DB_HOST")
 DB_PORT = os.getenv("DB_PORT")
  
 def get_connection():
-    database_url = os.getenv("DATABASE_URL")
-    if database_url:
-        return psycopg2.connect(database_url)
+    DATABASE_URL = os.getenv("DATABASE_URL")
+    if DATABASE_URL:
+        return psycopg2.connect(DATABASE_URL)
     
     # fallback local
     return psycopg2.connect(
