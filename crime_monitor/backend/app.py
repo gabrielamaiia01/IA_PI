@@ -195,22 +195,22 @@ def get_media_mes_proximo(df, mes, ano, coluna='letalidade_violenta'):
 
     return None  # Nenhum dado encontrado nos últimos 10 anos
 
+def gerar_drivers_principais(df, features_dict, importance_dict): 
+    """
+    Gera até 3 drivers principais: features que mais influenciaram a mudança na previsão,
+    considerando tanto a importância pelo modelo quanto a variação percentual em relação ao mês anterior.
+    """
+    scores = []
 
-def gerar_drivers_principais(df, features_dict, importance_dict):
-    """
-    Gera até 3 drivers principais: features que mais mudaram em relação ao mês mais próximo anterior
-    que tenha dados, considerando apenas features relevantes pelo modelo.
-    """
-    drivers = []
     mes = int(features_dict['mes'])
     ano = int(features_dict['ano'])
 
-    for feature, importance in sorted(importance_dict.items(), key=lambda x: x[1], reverse=True):
+    for feature, importance in importance_dict.items():
         # Ignora features irrelevantes
         if importance < 0.01 or feature in ['cisp', 'mes', 'ano']:
             continue
 
-        # Pega média do mês mais próximo anterior **da mesma feature**
+        # Pega média do mês mais próximo anterior da mesma feature
         valor_anterior = get_media_mes_proximo(df, mes, ano, coluna=feature)
         valor_atual = features_dict.get(feature, 0)
 
@@ -219,6 +219,15 @@ def gerar_drivers_principais(df, features_dict, importance_dict):
 
         diff_percent = (valor_atual - valor_anterior) / valor_anterior * 100
 
+        # Calcula score combinando importância e magnitude da variação
+        score = importance * abs(diff_percent)
+        scores.append((feature, diff_percent, score))
+
+    # Ordena pelo score combinado
+    scores.sort(key=lambda x: x[2], reverse=True)
+
+    drivers = []
+    for feature, diff_percent, _ in scores[:3]:
         if diff_percent > 3:
             frase = f"aumento de {feature.replace('_', ' ')} (+{round(diff_percent)}%)"
         elif diff_percent < -3:
@@ -227,29 +236,8 @@ def gerar_drivers_principais(df, features_dict, importance_dict):
             frase = f"{feature.replace('_', ' ')} estável"
 
         drivers.append(frase)
-        if len(drivers) >= 3:
-            break
 
     return ", ".join(drivers)
-
-
-def classificar_tendencia(pred, media_mes_proximo):
-    if media_mes_proximo is None or media_mes_proximo == 0:
-        return "Sem dados suficientes"
-
-    diff_ratio = (pred - media_mes_proximo) / media_mes_proximo
-
-    if diff_ratio <= -0.2:
-        return "Queda significativa"
-    elif diff_ratio <= -0.05:
-        return "Leve queda"
-    elif diff_ratio < 0.05:
-        return "Estável"
-    elif diff_ratio < 0.2:
-        return "Leve aumento"
-    else:
-        return "Aumento significativo"
-
 
 def classificar_risco(pred, df):
     vals = df['letalidade_violenta'][df['letalidade_violenta'] > 0]
@@ -485,12 +473,6 @@ Analise os dados de dispersão e produza uma resposta curta (2-3 frases) em port
 
     # ================== MAPA TEMÁTICO ==================
     map_data = {}
-    try:
-        resp_map = requests.get(f"{base_url}/api/map_image/{group_by}", params=params_map, timeout=10)
-        resp_map.raise_for_status()
-        map_data = resp_map.json()
-    except:
-        map_data = {}
 
     # map_data é o JSON retornado pelo map_image
     group_label = {
@@ -558,8 +540,8 @@ def criar_graficos_temp_dashboard(payload, tmp_dir, group_by):
 
         caminho = os.path.join(tmp_dir, "linha_evolucao.png")
         plt.tight_layout()
-        plt.savefig(caminho, dpi=70)
-        plt.close('all')
+        plt.savefig(caminho)
+        plt.close()
         saved["linha_evolucao"] = caminho
 
     # ===============================
@@ -577,8 +559,8 @@ def criar_graficos_temp_dashboard(payload, tmp_dir, group_by):
         plt.grid(axis='y', linestyle='--', alpha=0.6)
         caminho = os.path.join(tmp_dir, "barras_correlacao.png")
         plt.tight_layout()
-        plt.savefig(caminho, dpi=70)
-        plt.close('all')
+        plt.savefig(caminho)
+        plt.close()
         saved["barras_correlacao"] = caminho
 
     # ===============================
@@ -596,31 +578,28 @@ def criar_graficos_temp_dashboard(payload, tmp_dir, group_by):
         plt.grid(True, linestyle='--', alpha=0.6)
         caminho = os.path.join(tmp_dir, "scatter.png")
         plt.tight_layout()
-        plt.savefig(caminho, dpi=70)
-        plt.close('all')
+        plt.savefig(caminho)
+        plt.close()
         saved["scatter"] = caminho
 
     # ===============================
     # 🗺️ Mapa (pega diretamente do endpoint map_image)
     # ===============================
     try:
-        base_url = "http://localhost:5000"  # ajuste se usar outra porta/host
+        base_url = "http://{IP_OR_HOST}:5000"  # ajuste se usar outra porta/host
         params = {
             "inicio": payload.get("inicio", "2003-01-01"),
             "fim": payload.get("fim", "2025-07-31"),
             "municipio": payload.get("municipio")
         }
-        resp = requests.get(f"{base_url}/api/map_image/{group_by}", params=params, timeout=20)
-        if resp.status_code == 200:
-            map_json = resp.json()
-            map_url = f"{base_url}{map_json.get('image_url')}"
-            if map_url:
-                r = requests.get(map_url, timeout=10)
-                if r.status_code == 200:
-                    caminho = os.path.join(tmp_dir, "mapa.png")
-                    with open(caminho, "wb") as f:
-                        f.write(r.content)
-                    saved["mapa"] = caminho
+        map_url = f"{base_url}{map_data.get('image_url')}"
+        if map_url:
+            r = requests.get(map_url, timeout=10)
+            if r.status_code == 200:
+                caminho = os.path.join(tmp_dir, "mapa.png")
+                with open(caminho, "wb") as f:
+                    f.write(r.content)
+                saved["mapa"] = caminho
     except Exception as e:
         print(f"[ERRO mapa]: {e}")
 
@@ -772,7 +751,7 @@ def criar_graficos_temp_agrupamentos(payload, tmp_dir, group_by):
         caminho = os.path.join(tmp_dir, "scatter_pca.png")
         plt.tight_layout()
         plt.savefig(caminho)
-        plt.close('all')
+        plt.close()
         saved["scatter_pca"] = caminho
 
     # ===============================
@@ -1067,6 +1046,20 @@ def dashboard_data():
         homicidios_dolosos_pct = None
         variacao_latrocinio_anual_pct = None
 
+    global payload_dashboard
+    payload_dashboard = {
+        "letalidade_violenta_total": letalidade_total,
+        "homicidios_dolosos": round(homicidios_dolosos, 2),
+        "homicidios_dolosos_pct": homicidios_dolosos_pct,
+        "latrocinios": latrocinios,
+        "variacao_latrocinio_anual_pct": variacao_latrocinio_anual_pct,
+        "mortes_intervencao_policial": round(mortes_intervencao_policial or 0, 2),
+        "tendencia_mortes_intervencao_policial": tendencia_interv,
+        "evolucao_temporal": evolucao_temporal,
+        "correlacao_crimes": correlacao_dict,
+        "scatter_data": scatter_data
+    }
+
     return jsonify(replace_invalid({
         "letalidade_violenta_total": letalidade_total,
         "homicidios_dolosos": round(homicidios_dolosos, 2),
@@ -1191,6 +1184,11 @@ def map_image(group_by):
 
     data_saida = gdf[[shapefile_col, "NM_MUN", "letalidade_violenta"]].drop_duplicates().to_dict(orient="records")
 
+    global map_data
+    map_data = {
+        "image_url": f"/static/img/{image_name}",
+        "data": data_saida
+    }
     return jsonify({
         "image_url": f"/static/img/{image_name}",
         "data": data_saida
@@ -1469,6 +1467,17 @@ def agrupamentos_data():
 
     df_clusters_global = df.copy()
 
+    global payload_agrupamentos
+    payload_agrupamentos = {
+        "media_clusters": media_clusters,
+        "pca_data": pca_data,
+        "explained_variance": [round(v, 3) for v in pca.explained_variance_ratio_],
+        "perfil_medio_img_sem_registro_ocorrencias": f"/static/img/perfil_medio_sem_registro_ocorrencias_{k}.png",
+        "perfil_medio_img_com_registro_ocorrencias": f"/static/img/perfil_medio_com_registro_ocorrencias_{k}.png",
+        "perfil_medio_data": df_cluster_profile.to_dict(orient="index"),
+        "importancias": importances_series.to_dict()
+    }
+
     return jsonify({
         "media_clusters": media_clusters,
         "pca_data": pca_data,
@@ -1646,19 +1655,9 @@ def export_dashboard_pdf():
     group_by = request.args.get("group_by") or "mcirc"
     params = {"inicio":inicio,"fim":fim,"municipio":municipio,"group_by":group_by}
 
-    # 1) Obter dados do dashboard
-    try:
-        base_url = request.url_root.rstrip('/')
-        response = requests.get(f"{base_url}/api/dashboard_data", params=params, timeout=30)
-        response.raise_for_status()
-        payload = response.json()
-    except Exception as e:
-        print(f"[ERRO API /dashboard_data] {e}")
-        return jsonify({"erro":str(e)}), 500
-
     # 2) Gerar descrições automáticas
     try:
-        descricoes = gerar_descricoes_dashboard(payload, group_by)
+        descricoes = gerar_descricoes_dashboard(payload_dashboard, group_by)
     except:
         descricoes = {
             "linha_evolucao": "Consulte o gráfico de evolução temporal.",
@@ -1670,7 +1669,7 @@ def export_dashboard_pdf():
     # 3) Criar PDF
     try:
         with tempfile.TemporaryDirectory() as tmpdir:
-            saved_imgs = criar_graficos_temp_dashboard(payload,tmpdir,group_by)
+            saved_imgs = criar_graficos_temp_dashboard(payload_dashboard,tmpdir,group_by)
             buffer = io.BytesIO()
             doc = SimpleDocTemplate(buffer, pagesize=A4)
             styles = getSampleStyleSheet()
@@ -1729,19 +1728,9 @@ def export_agrupamentos_pdf():
     k = request.args.get("k") or 4
     params = {"inicio":inicio,"fim":fim,"municipio":municipio,"group_by":group_by, "k": k}
 
-    # 1) Obter dados dos agrupamentos
-    try:
-        base_url = request.url_root.rstrip('/')
-        response = requests.get(f"{base_url}/api/agrupamentos_data", params=params, timeout=30)
-        response.raise_for_status()
-        payload = response.json()
-    except Exception as e:
-        print(f"[ERRO API /agrupamentos_data] {e}")
-        return jsonify({"erro":str(e)}), 500
-
     # 2) Gerar descrições automáticas
     try:
-        descricoes = gerar_descricoes_agrupamentos(payload, group_by)
+        descricoes = gerar_descricoes_agrupamentos(payload_agrupamentos, group_by)
     except:
         descricoes = {
             "scatter_pca": "Consulte o gráfico de projeção PCA.",
@@ -1753,7 +1742,7 @@ def export_agrupamentos_pdf():
     # 3) Criar PDF
     try:
         with tempfile.TemporaryDirectory() as tmpdir:
-            saved_imgs = criar_graficos_temp_agrupamentos(payload,tmpdir,group_by)
+            saved_imgs = criar_graficos_temp_agrupamentos(payload_agrupamentos,tmpdir,group_by)
             buffer = io.BytesIO()
             doc = SimpleDocTemplate(buffer, pagesize=A4)
             styles = getSampleStyleSheet()
@@ -1780,7 +1769,7 @@ def export_agrupamentos_pdf():
                 story.append(Paragraph(descricoes.get(chave,"Análise não disponível."), styles["Normal"]))
                 story.append(Spacer(1,8))
                 if saved_imgs.get(chave):
-                    story.append(Image(saved_imgs[chave], width=350, height=180))
+                    story.append(Image(saved_imgs[chave], width=480, height=240))
                 story.append(Spacer(1,16))
 
             story.append(Spacer(1,20))
