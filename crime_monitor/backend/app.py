@@ -558,8 +558,8 @@ def criar_graficos_temp_dashboard(payload, tmp_dir, group_by):
 
         caminho = os.path.join(tmp_dir, "linha_evolucao.png")
         plt.tight_layout()
-        plt.savefig(caminho)
-        plt.close()
+        plt.savefig(caminho, dpi=70)
+        plt.close('all')
         saved["linha_evolucao"] = caminho
 
     # ===============================
@@ -577,8 +577,8 @@ def criar_graficos_temp_dashboard(payload, tmp_dir, group_by):
         plt.grid(axis='y', linestyle='--', alpha=0.6)
         caminho = os.path.join(tmp_dir, "barras_correlacao.png")
         plt.tight_layout()
-        plt.savefig(caminho)
-        plt.close()
+        plt.savefig(caminho, dpi=70)
+        plt.close('all')
         saved["barras_correlacao"] = caminho
 
     # ===============================
@@ -596,8 +596,8 @@ def criar_graficos_temp_dashboard(payload, tmp_dir, group_by):
         plt.grid(True, linestyle='--', alpha=0.6)
         caminho = os.path.join(tmp_dir, "scatter.png")
         plt.tight_layout()
-        plt.savefig(caminho)
-        plt.close()
+        plt.savefig(caminho, dpi=70)
+        plt.close('all')
         saved["scatter"] = caminho
 
     # ===============================
@@ -772,7 +772,7 @@ def criar_graficos_temp_agrupamentos(payload, tmp_dir, group_by):
         caminho = os.path.join(tmp_dir, "scatter_pca.png")
         plt.tight_layout()
         plt.savefig(caminho)
-        plt.close()
+        plt.close('all')
         saved["scatter_pca"] = caminho
 
     # ===============================
@@ -1780,7 +1780,7 @@ def export_agrupamentos_pdf():
                 story.append(Paragraph(descricoes.get(chave,"Análise não disponível."), styles["Normal"]))
                 story.append(Spacer(1,8))
                 if saved_imgs.get(chave):
-                    story.append(Image(saved_imgs[chave], width=480, height=240))
+                    story.append(Image(saved_imgs[chave], width=350, height=180))
                 story.append(Spacer(1,16))
 
             story.append(Spacer(1,20))
