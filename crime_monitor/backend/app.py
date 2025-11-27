@@ -206,14 +206,11 @@ def gerar_drivers_principais(modelo, df, features_dict, n_drivers=3):
     Isso mede precisamente quanto a contribuição da feature mudou.
     """
 
-    import shap
-    import pandas as pd
-
     # ---------------------------
     # Garantias básicas
     # ---------------------------
     if not isinstance(df, pd.DataFrame):
-        df = pd.DataFrame(df)
+        df = pd.DataFrame([df])
 
     for col in ['mes', 'ano']:
         if col not in df.columns:
@@ -245,7 +242,8 @@ def gerar_drivers_principais(modelo, df, features_dict, n_drivers=3):
         X_prev = df[df['ano'] <= ano].sort_values(['ano', 'mes']).tail(1)
 
     # média das features do mês anterior
-    X_prev_mean = X_prev.drop(columns=['mes', 'ano', 'cisp'], errors='ignore').mean().to_frame().T
+    X_prev_numeric = X_prev.select_dtypes(include=['number'])
+    X_prev_mean = X_prev_numeric.mean().to_frame().T
 
     # Alinhar colunas com X_current
     X_prev_mean = X_prev_mean.reindex(columns=X_current.columns, fill_value=0)
@@ -1372,7 +1370,11 @@ def previsao_api():
     importance_dict = dict(zip(feature_names, importance))
 
     # === Drivers principais ===
-    drivers = gerar_drivers_principais(df, dict(zip(feature_names, data['features'])), importance_dict)
+    drivers = gerar_drivers_principais(
+        model,           # modelo REAL
+        df,               # histórico
+        dict(zip(feature_names, data['features'])),
+    )
 
     # === Salvar previsão no banco (não fatal) ===
     try:
