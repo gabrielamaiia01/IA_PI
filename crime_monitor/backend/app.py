@@ -716,13 +716,10 @@ Analise as importâncias das variáveis e produza uma resposta curta (2-3 frases
 
         resumo_mapa = "Dados de mapa não disponíveis."
         try:
-            resp = requests.get(f"{base_url}/api/mapa_clusters", params=params, timeout=20)
-            resp.raise_for_status()
-            map_data = resp.json()
-            if map_data.get("data"):
+            if mapa_clusters.get("data"):
                 resumo_mapa = ""
-                shapefile_col = [c for c in map_data["data"][0].keys() if c != "cluster"][0]
-                for item in map_data["data"]:
+                shapefile_col = [c for c in mapa_clusters["data"][0].keys() if c != "cluster"][0]
+                for item in mapa_clusters["data"]:
                     regiao = item.get(shapefile_col, "N/A")
                     valor = item.get("cluster", -1)
                     resumo_mapa += f"{regiao}: cluster {valor}; "
@@ -760,7 +757,7 @@ def criar_graficos_temp_agrupamentos(payload, tmp_dir, group_by):
     if pca_data:
         xs = [p.get("pca1", 0) for p in pca_data]
         ys = [p.get("pca2", 0) for p in pca_data]
-        clusters = [p.get("cluster", 0) for p in pca_data]  # pega o cluster de cada ponto
+        clusters = [p.get("cluster", 0) for p in pca_data]
 
         plt.figure(figsize=(6,6))
         scatter = plt.scatter(xs, ys, c=clusters, cmap='tab10', alpha=0.7)
@@ -812,33 +809,32 @@ def criar_graficos_temp_agrupamentos(payload, tmp_dir, group_by):
         saved["importancia_variaveis"] = caminho
 
     # ===============================
-    # Mapa temático dos clusters
+    # Mapa temático dos clusters — SEM base_url, usando apenas mapa_clusters
     # ===============================
     try:
-        base_url = f"http://{IP_OR_HOST}:5000"
-        params = {
-            "inicio": payload.get("inicio", "2003-01-01"),
-            "fim": payload.get("fim", "2025-07-31"),
-            "municipio": payload.get("municipio", ""),
-            "group_by": group_by,  # USA O PARÂMETRO RECEBIDO, NÃO O DO PAYLOAD
-            "k": payload.get("k", 4)
-        }
-        resp = requests.get(f"{base_url}/api/mapa_clusters", params=params, timeout=20)
-        if resp.status_code == 200:
-            map_json = resp.json()
-            map_url = f"{base_url}{map_json.get('mapa_clusters')}"
-            if map_url:
-                r = requests.get(map_url, timeout=10)
-                if r.status_code == 200:
-                    caminho = os.path.join(tmp_dir, "mapa_clusters.png")
-                    with open(caminho, "wb") as f:
-                        f.write(r.content)
-                    saved["mapa_clusters"] = caminho
+        map_url = mapa_clusters.get("mapa_clusters")  # ex: /static/img/clusters_cisp__.png?v=12345
+        if map_url:
+
+            # 🔹 Remove parâmetros do tipo ?v=...
+            map_url_clean = map_url.split("?")[0]
+
+            # 🔹 Extrai apenas o nome do arquivo
+            img_filename = map_url_clean.split("/")[-1]
+
+            # 🔹 Caminho real do diretório onde o backend salva as imagens
+            source_path = os.path.join(MAP_FOLDER, img_filename)
+
+            if os.path.exists(source_path):
+                dest_path = os.path.join(tmp_dir, "mapa_clusters.png")
+                shutil.copy(source_path, dest_path)
+                saved["mapa_clusters"] = dest_path
+            else:
+                print(f"[AVISO] Arquivo do mapa_clusters não encontrado: {source_path}")
+
     except Exception as e:
         print(f"[ERRO mapa clusters]: {e}")
 
     return saved
-
 
 @app.route('/captcha')
 def captcha():
@@ -1632,6 +1628,11 @@ def mapa_clusters():
     plt.savefig(image_path, bbox_inches="tight")
     plt.close(fig)
 
+    global mapa_clusters
+    mapa_clusters={
+        "mapa_clusters": f"/static/img/{image_name}", 
+        "data": gdf[[shapefile_col, "cluster"]].to_dict(orient="records")
+    }
     return jsonify({"mapa_clusters": f"/static/img/{image_name}", "data": gdf[[shapefile_col, "cluster"]].to_dict(orient="records")})
 
 @app.route("/api/predizer_cluster", methods=["POST"])
