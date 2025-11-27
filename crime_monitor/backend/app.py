@@ -1258,7 +1258,7 @@ def previsao_api():
     prev_labels = []
 
     # === Buscar previsões do banco ===
-    if all([DB_NAME, DB_USER, DB_PASSWORD, DB_HOST, DB_PORT, DATABASE_URL]):
+    if DATABASE_URL or all([DB_NAME, DB_USER, DB_PASSWORD, DB_HOST, DB_PORT]):
         try:
             conn = get_connection()
             cursor = conn.cursor()
