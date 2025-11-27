@@ -197,89 +197,107 @@ def get_media_mes_proximo(df, mes, ano, coluna='letalidade_violenta'):
 
 def gerar_drivers_principais(modelo, df, features_dict, n_drivers=3):
     """
-    Gera até `n_drivers` principais: features que mais impactaram a mudança na previsão,
-    combinando SHAP (impacto real no modelo) e variação percentual da feature em relação ao mês anterior.
+    Identifica as variáveis que mais influenciaram a MUDANÇA da previsão
+    entre o mês atual e o mês anterior usando delta-SHAP.
 
-    Args:
-        modelo: modelo treinado (sklearn, XGBoost, LightGBM, etc.)
-        df: DataFrame histórico contendo 'mes', 'ano', 'cisp' e features
-        features_dict: dicionário com features para a previsão atual
-        n_drivers: número máximo de drivers a retornar
+    Agora o driver é baseado em:
+        |SHAP_atual - SHAP_anterior|
+
+    Isso mede precisamente quanto a contribuição da feature mudou.
     """
-    # --- Garantir que df seja DataFrame ---
+
+    import shap
+    import pandas as pd
+
+    # ---------------------------
+    # Garantias básicas
+    # ---------------------------
     if not isinstance(df, pd.DataFrame):
         df = pd.DataFrame(df)
 
-    # Checa colunas mínimas
     for col in ['mes', 'ano']:
         if col not in df.columns:
-            raise ValueError(f"Coluna '{col}' não encontrada no DataFrame histórico.")
+            raise ValueError(f"Coluna '{col}' não encontrada no DataFrame.")
 
-    # --- Converter mes e ano para int ---
     df['mes'] = df['mes'].astype(int)
     df['ano'] = df['ano'].astype(int)
 
-    # --- Converter features_dict para DataFrame ---
+    # ---------------------------
+    # Extrair dados Mês Atual
+    # ---------------------------
     X_current = pd.DataFrame([features_dict])
-
-    # --- Mês e ano atual ---
     mes = int(features_dict['mes'])
     ano = int(features_dict['ano'])
 
-    # --- Encontrar mês anterior com dados ---
-    mes_anterior = mes - 1
-    ano_anterior = ano
-    if mes_anterior == 0:
-        mes_anterior = 12
-        ano_anterior -= 1
+    # ---------------------------
+    # Encontrar Mês Anterior
+    # ---------------------------
+    mes_ant = mes - 1
+    ano_ant = ano
+    if mes_ant == 0:
+        mes_ant = 12
+        ano_ant -= 1
 
-    X_prev = df[(df['mes'] == mes_anterior) & (df['ano'] == ano_anterior)].copy()
+    X_prev = df[(df['mes'] == mes_ant) & (df['ano'] == ano_ant)].copy()
 
-    # Se não houver dados, pega mês/ano anterior mais próximo disponível
+    # fallback (pega mês disponível mais recente antes do atual)
     if X_prev.empty:
-        X_prev = df[df['ano'] <= ano].sort_values(['ano', 'mes'], ascending=[True, True]).tail(1)
+        X_prev = df[df['ano'] <= ano].sort_values(['ano', 'mes']).tail(1)
 
-    # Média das features do mês anterior
+    # média das features do mês anterior
     X_prev_mean = X_prev.drop(columns=['mes', 'ano', 'cisp'], errors='ignore').mean().to_frame().T
 
-    # --- SHAP Explainer ---
+    # Alinhar colunas com X_current
+    X_prev_mean = X_prev_mean.reindex(columns=X_current.columns, fill_value=0)
+
+    # ---------------------------
+    # Calcular SHAP atual
+    # ---------------------------
     explainer = shap.Explainer(modelo, X_prev_mean)
-    shap_values = explainer(X_current)
+    shap_current = explainer(X_current)
+    shap_prev = explainer(X_prev_mean)
 
-    # --- Calcula variação percentual da feature ---
-    feature_changes = {}
-    for feature in X_current.columns:
-        if feature in ['mes', 'ano', 'cisp']:
-            continue
-        valor_atual = X_current[feature].iloc[0]
-        valor_anterior = X_prev_mean[feature].iloc[0]
-        if valor_anterior == 0:
-            diff_percent = 0
-        else:
-            diff_percent = (valor_atual - valor_anterior) / valor_anterior * 100
-        feature_changes[feature] = diff_percent
+    # Valores SHAP como vetores
+    sh_current = shap_current.values[0]
+    sh_prev = shap_prev.values[0]
 
-    # --- Combina magnitude SHAP com variação da feature ---
-    scores = {}
+    # ---------------------------
+    # Calcular DELTA-SHAP
+    # ---------------------------
+    delta_shap = {}
     for i, feature in enumerate(X_current.columns):
         if feature in ['mes', 'ano', 'cisp']:
             continue
-        scores[feature] = abs(shap_values.values[0][i]) * abs(feature_changes[feature])
+        delta_shap[feature] = abs(sh_current[i] - sh_prev[i])
 
-    # --- Ordena pelo score combinado ---
-    top_features = sorted(scores.items(), key=lambda x: x[1], reverse=True)[:n_drivers]
+    # ---------------------------
+    # Selecionar top N variáveis
+    # ---------------------------
+    top = sorted(delta_shap.items(), key=lambda x: x[1], reverse=True)[:n_drivers]
 
-    # --- Gera frases de drivers ---
+    # ---------------------------
+    # Criar descrições naturais
+    # ---------------------------
     drivers = []
-    for feature, _ in top_features:
-        diff_percent = feature_changes[feature]
-        if diff_percent > 3:
-            frase = f"aumento de {feature.replace('_', ' ')} (+{round(diff_percent)}%)"
-        elif diff_percent < -3:
-            frase = f"queda de {feature.replace('_', ' ')} ({round(diff_percent)}%)"
+    for feature, score in top:
+        old = X_prev_mean[feature].iloc[0]
+        new = X_current[feature].iloc[0]
+
+        if old == 0:
+            change_pct = 0
         else:
-            frase = f"{feature.replace('_', ' ')} estável"
-        drivers.append(frase)
+            change_pct = ((new - old) / old) * 100
+
+        fname = feature.replace("_", " ")
+
+        if change_pct > 3:
+            desc = f"aumento de {fname} (+{round(change_pct)}%)"
+        elif change_pct < -3:
+            desc = f"queda de {fname} ({round(change_pct)}%)"
+        else:
+            desc = f"{fname} estável"
+
+        drivers.append(desc)
 
     return ", ".join(drivers)
 
