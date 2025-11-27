@@ -52,6 +52,7 @@ import shutil  # Para limpar arquivos temporários
 import time    # Para time.sleep em gerar_texto_gpt4o
 from datetime import datetime
 from captcha.image import ImageCaptcha
+import shap
 
 # ... (seus imports existentes)
 
@@ -194,50 +195,94 @@ def get_media_mes_proximo(df, mes, ano, coluna='letalidade_violenta'):
 
     return None  # Nenhum dado encontrado nos últimos 10 anos
 
-def gerar_drivers_principais(df, features_dict, importance_dict): 
+def gerar_drivers_principais(modelo, df, features_dict, n_drivers=3):
     """
-    Gera até 3 drivers principais: features que mais influenciaram a mudança na previsão,
-    considerando tanto a importância pelo modelo quanto a variação percentual em relação ao mês anterior.
-    """
-    scores = []
+    Gera até `n_drivers` principais: features que mais impactaram a mudança na previsão,
+    combinando SHAP (impacto real no modelo) e variação percentual da feature em relação ao mês anterior.
 
+    Args:
+        modelo: modelo treinado (sklearn, XGBoost, LightGBM, etc.)
+        df: DataFrame histórico contendo 'mes', 'ano', 'cisp' e features
+        features_dict: dicionário com features para a previsão atual
+        n_drivers: número máximo de drivers a retornar
+    """
+    # --- Garantir que df seja DataFrame ---
+    if not isinstance(df, pd.DataFrame):
+        df = pd.DataFrame(df)
+
+    # Checa colunas mínimas
+    for col in ['mes', 'ano']:
+        if col not in df.columns:
+            raise ValueError(f"Coluna '{col}' não encontrada no DataFrame histórico.")
+
+    # --- Converter mes e ano para int ---
+    df['mes'] = df['mes'].astype(int)
+    df['ano'] = df['ano'].astype(int)
+
+    # --- Converter features_dict para DataFrame ---
+    X_current = pd.DataFrame([features_dict])
+
+    # --- Mês e ano atual ---
     mes = int(features_dict['mes'])
     ano = int(features_dict['ano'])
 
-    for feature, importance in importance_dict.items():
-        # Ignora features irrelevantes
-        if importance < 0.01 or feature in ['cisp', 'mes', 'ano']:
+    # --- Encontrar mês anterior com dados ---
+    mes_anterior = mes - 1
+    ano_anterior = ano
+    if mes_anterior == 0:
+        mes_anterior = 12
+        ano_anterior -= 1
+
+    X_prev = df[(df['mes'] == mes_anterior) & (df['ano'] == ano_anterior)].copy()
+
+    # Se não houver dados, pega mês/ano anterior mais próximo disponível
+    if X_prev.empty:
+        X_prev = df[df['ano'] <= ano].sort_values(['ano', 'mes'], ascending=[True, True]).tail(1)
+
+    # Média das features do mês anterior
+    X_prev_mean = X_prev.drop(columns=['mes', 'ano', 'cisp'], errors='ignore').mean().to_frame().T
+
+    # --- SHAP Explainer ---
+    explainer = shap.Explainer(modelo, X_prev_mean)
+    shap_values = explainer(X_current)
+
+    # --- Calcula variação percentual da feature ---
+    feature_changes = {}
+    for feature in X_current.columns:
+        if feature in ['mes', 'ano', 'cisp']:
             continue
+        valor_atual = X_current[feature].iloc[0]
+        valor_anterior = X_prev_mean[feature].iloc[0]
+        if valor_anterior == 0:
+            diff_percent = 0
+        else:
+            diff_percent = (valor_atual - valor_anterior) / valor_anterior * 100
+        feature_changes[feature] = diff_percent
 
-        # Pega média do mês mais próximo anterior da mesma feature
-        valor_anterior = get_media_mes_proximo(df, mes, ano, coluna=feature)
-        valor_atual = features_dict.get(feature, 0)
+    # --- Combina magnitude SHAP com variação da feature ---
+    scores = {}
+    for i, feature in enumerate(X_current.columns):
+        if feature in ['mes', 'ano', 'cisp']:
+            continue
+        scores[feature] = abs(shap_values.values[0][i]) * abs(feature_changes[feature])
 
-        if valor_anterior is None or valor_anterior == 0:
-            continue  # não há dados anteriores para comparação
+    # --- Ordena pelo score combinado ---
+    top_features = sorted(scores.items(), key=lambda x: x[1], reverse=True)[:n_drivers]
 
-        diff_percent = (valor_atual - valor_anterior) / valor_anterior * 100
-
-        # Calcula score combinando importância e magnitude da variação
-        score = importance * abs(diff_percent)
-        scores.append((feature, diff_percent, score))
-
-    # Ordena pelo score combinado
-    scores.sort(key=lambda x: x[2], reverse=True)
-
+    # --- Gera frases de drivers ---
     drivers = []
-    for feature, diff_percent, _ in scores[:3]:
+    for feature, _ in top_features:
+        diff_percent = feature_changes[feature]
         if diff_percent > 3:
             frase = f"aumento de {feature.replace('_', ' ')} (+{round(diff_percent)}%)"
         elif diff_percent < -3:
             frase = f"queda de {feature.replace('_', ' ')} ({round(diff_percent)}%)"
         else:
             frase = f"{feature.replace('_', ' ')} estável"
-
         drivers.append(frase)
 
     return ", ".join(drivers)
-    
+
 def classificar_tendencia(pred, media_mes_proximo):
     if media_mes_proximo is None or media_mes_proximo == 0:
         return "Sem dados suficientes"
