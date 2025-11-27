@@ -493,8 +493,6 @@ Analise os dados de dispersão e produza uma resposta curta (2-3 frases) em port
     descricoes["scatter"] = gerar_texto_gpt4o(prompt_scatter)
 
     # ================== MAPA TEMÁTICO ==================
-    map_data = {}
-
     # map_data é o JSON retornado pelo map_image
     group_label = {
         "mcirc": "município",
@@ -604,25 +602,27 @@ def criar_graficos_temp_dashboard(payload, tmp_dir, group_by):
         saved["scatter"] = caminho
 
     # ===============================
-    # 🗺️ Mapa (pega diretamente do endpoint map_image)
+    # 🗺️ Mapa - SOLUÇÃO: Chamar a função diretamente
     # ===============================
     try:
-        base_url = "http://{IP_OR_HOST}:5000"  # ajuste se usar outra porta/host
-        params = {
-            "inicio": payload.get("inicio", "2003-01-01"),
-            "fim": payload.get("fim", "2025-07-31"),
-            "municipio": payload.get("municipio")
-        }
-        map_url = f"{base_url}{map_data.get('image_url')}"
-        if map_url:
-            r = requests.get(map_url, timeout=10)
-            if r.status_code == 200:
-                caminho = os.path.join(tmp_dir, "mapa.png")
-                with open(caminho, "wb") as f:
-                    f.write(r.content)
-                saved["mapa"] = caminho
+        # Copia a imagem gerada para o diretório temporário
+        if map_data and map_data.get("image_url"):
+            # Remove o prefixo /static/img/
+            img_filename = map_data["image_url"].split('/')[-1]
+            source_path = os.path.join(MAP_FOLDER, img_filename)
+            
+            if os.path.exists(source_path):
+                dest_path = os.path.join(tmp_dir, "mapa.png")
+                import shutil
+                shutil.copy(source_path, dest_path)
+                saved["mapa"] = dest_path
+            else:
+                print(f"[AVISO] Imagem do mapa não encontrada: {source_path}")
+                        
     except Exception as e:
         print(f"[ERRO mapa]: {e}")
+        import traceback
+        traceback.print_exc()
 
     return saved
 
@@ -1670,6 +1670,8 @@ def predizer_cluster():
 @app.route("/api/export_dashboard_pdf")
 @login_required
 def export_dashboard_pdf():
+    global payload_dashboard  # ✅ Adicionar essa linha
+    
     inicio = request.args.get("inicio") or "2003-01-01"
     fim = request.args.get("fim") or "2025-07-31"
     municipio = request.args.get("municipio")
@@ -1703,12 +1705,12 @@ def export_dashboard_pdf():
             story.append(Paragraph(f"<b>Município:</b> {params['municipio'] or 'Todos'}", styles["Normal"]))
             story.append(Spacer(1,20))
 
-            # KPIs principais
+            # KPIs principais - ✅ CORRIGIDO: usar payload_dashboard
             story.append(Paragraph("<b>Indicadores Principais</b>", styles["Heading2"]))
-            story.append(Paragraph(f"• Letalidade Violenta Total: {payload.get('letalidade_violenta_total',0)}", styles["Normal"]))
-            story.append(Paragraph(f"• Homicídios Dolosos (média): {payload.get('homicidios_dolosos',0)}", styles["Normal"]))
-            story.append(Paragraph(f"• Soma de latrocínios: {payload.get('latrocinios',0)}", styles["Normal"]))
-            story.append(Paragraph(f"• Homícidios Por Intervenção Policial: {payload.get('mortes_intervencao_policial',0)}", styles["Normal"]))
+            story.append(Paragraph(f"• Letalidade Violenta Total: {payload_dashboard.get('letalidade_violenta_total',0)}", styles["Normal"]))
+            story.append(Paragraph(f"• Homicídios Dolosos (média): {payload_dashboard.get('homicidios_dolosos',0)}", styles["Normal"]))
+            story.append(Paragraph(f"• Soma de latrocínios: {payload_dashboard.get('latrocinios',0)}", styles["Normal"]))
+            story.append(Paragraph(f"• Homícidios Por Intervenção Policial: {payload_dashboard.get('mortes_intervencao_policial',0)}", styles["Normal"]))
             story.append(Spacer(1,20))
 
             # Seções
