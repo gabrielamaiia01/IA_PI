@@ -1270,6 +1270,7 @@ def previsao_api():
                 ORDER BY ano, mes
             """)
             prev_data = cursor.fetchall()
+            print(prev_data)
             for row in prev_data:
                 ano = int(row[0])
                 mes = int(row[1])
