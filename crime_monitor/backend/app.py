@@ -172,7 +172,6 @@ def load_data():
     df = pd.read_csv(DATA_PATH, sep=";", encoding="latin1")
     return df
 
-
 def get_media_mes_proximo(df, mes, ano, coluna='letalidade_violenta'):
     """
     Retorna a média do mês mais próximo anterior que tenha algum dado na coluna especificada,
@@ -1259,7 +1258,7 @@ def previsao_api():
     prev_labels = []
 
     # === Buscar previsões do banco ===
-    if all([DB_NAME, DB_USER, DB_PASSWORD, DB_HOST, DB_PORT]):
+    if all([DB_NAME, DB_USER, DB_PASSWORD, DB_HOST, DB_PORT, DATABASE_URL]):
         try:
             conn = get_connection()
             cursor = conn.cursor()
@@ -1282,6 +1281,7 @@ def previsao_api():
             conn.close()
         except Exception as e:
             print("Erro ao buscar previsões no banco:", e)
+
 
     # === Dados históricos para gráfico ===
     historico_labels = [f"{int(a)}-{int(m):02d}" for a, m in zip(df_hist['ano'], df_hist['mes'])]
