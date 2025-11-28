@@ -924,6 +924,11 @@ def previsao():
 def agrupamentos():
     return render_template('agrupamentos.html')
 
+@app.route('/associacao')
+@login_required
+def associacao():
+    return render_template('associacao.html')
+
 @app.route('/logout')
 def logout():
     session.clear()
@@ -1933,7 +1938,7 @@ def login():
             if user_captcha != session.get('captcha_text', ''):
                 flash("Captcha incorreto!")
                 return redirect(url_for('login'))
-
+        
         # Conectar ao banco de dados
         conn = get_connection()
         cur = conn.cursor()
@@ -2327,7 +2332,7 @@ def export_previsao_pdf():
         pass
 
     return send_file(buffer, as_attachment=True, download_name='relatorio_previsao.pdf', mimetype='application/pdf')
-  
+
 if __name__ == "__main__":
     # TESTA SE ESTÁ RODANDO LOCALMENTE
     if os.getenv("RENDER") != "true":  # Render define a variável de ambiente RENDER=true
