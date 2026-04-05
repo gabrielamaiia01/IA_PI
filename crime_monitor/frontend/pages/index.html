@@ -146,11 +146,37 @@
                                 <option value="aisp">AISP</option>
                                 <option value="risp">RISP</option>
                             </select>
+                            <br>
+                            <div id="map-column-container">
+                                <label for="map-column">Indicador:</label>
+                                <select id="map-column">
+                                    <option value="letalidade_violenta">Letalidade Violenta</option>
+                                    <option value="hom_doloso">Homicídio Doloso</option>
+                                    <option value="latrocinio">Latrocínio</option>
+                                    <option value="hom_por_interv_policial">Intervenção Policial</option>
+                                    <option value="tentat_hom">Tentativa de Homicídio</option>
+                                    <option value="lesao_corp_dolosa">Lesão Corporal Dolosa</option>
+                                    <option value="estupro">Estupro</option>
+                                    <option value="lesao_corp_culposa">Lesão Corporal Culposa</option>
+                                    <option value="roubo_veiculo">Roubo de Veículo</option>
+                                    <option value="roubo_rua">Roubo de Rua</option>
+                                    <option value="roubo_comercio">Roubo a Comércio</option>
+                                    <option value="roubo_residencia">Roubo a Residência</option>
+                                    <option value="estelionato">Estelionato</option>
+                                    <option value="apreensao_drogas">Apreensão de Drogas</option>
+                                    <option value="trafico_drogas">Tráfico de Drogas</option>
+                                    <option value="apf">APF</option>
+                                    <option value="pessoas_desaparecidas">Pessoas Desaparecidas</option>
+                                    <option value="encontro_cadaver">Encontro de Cadáver</option>
+                                    <option value="registro_ocorrencias">Registro de Ocorrências</option>
+                                    <option value="furto_veiculos">Furto de Veículos</option>
+                                </select>
+                            </div>
+
                             <div class="chart-type">Heatmap</div>
                         </div>
                         <div id="map-container" class="chart-placeholder" style="height: 300px;">
-                            <img id="map-img" alt="Mapa de letalidade violenta"
-                                style="height:100%; object-fit:contain;">
+                            <div id="map" style="height:100%; width:100%;"></div>
                         </div>
                     </div>
                 </div>

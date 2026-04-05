@@ -1,6 +1,6 @@
-CREATE DATABASE crimes;
+CREATE DATABASE crimes_RJ;
  
-\c crimes
+\c crimes_RJ
  
 CREATE TABLE IF NOT EXISTS dados_previstos
 (

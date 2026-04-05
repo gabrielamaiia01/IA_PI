@@ -771,6 +771,7 @@ span {
 .map-controls {
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
     justify-content: space-between;
     gap: 10px;
     margin-bottom: 15px;
@@ -944,7 +945,7 @@ input:disabled {
 .charts-header h2 {
     margin: 0;
     font-size: 22px;
-    color: #333;
+    color: #0f0c0c;
     line-height: 1.2;
     /* Garante que o texto fique bem alinhado */
 }
@@ -1150,4 +1151,12 @@ input:disabled {
     .sidebar li {
         width: 77%;
     }
+}
+
+#map-column-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    width: 390px;
+    align-items: center;
 }

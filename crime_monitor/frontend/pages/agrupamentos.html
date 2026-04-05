@@ -6,7 +6,7 @@
     <title>Monitor RJ</title>
     <link rel="stylesheet" href="../static/css/style.css">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined" />
-
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
 </head>
 <body>
@@ -124,7 +124,7 @@
                         <div class="chart-type">Mapa</div>
                     </div>
                     <div class="chart-placeholder">
-                        <img id="mapa_clusters_img" width="400" alt="Mapa dos clusters">
+                        <div id="mapa_clusters" style="height: 500px; width: 100%;"></div>
                     </div>
                 </div>
             </section>
@@ -219,5 +219,7 @@
 
     <!-- ===== ARQUIVO PRINCIPAL ===== -->
     <script src="/static/js/agrupamentos.js"></script>
+
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 </body>
 </html>

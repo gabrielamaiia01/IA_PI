@@ -191,26 +191,86 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     // ===== Atualizar mapa =====
+    let mapa = null;
+    let camadaGeo = null;
+
     async function atualizarMapa() {
         if (!dadosClustersCache) return;
-        const group_by = groupBySelect.value || "cisp";
-        const mapClusters = document.getElementById("mapa_clusters_img");
+
+        const group_by = document.getElementById("group-by").value;
         const { inicio, fim } = dadosClustersCache;
 
         try {
-            const resMapa = await fetch(`/api/mapa_clusters?group_by=${group_by}&inicio=${inicio}&fim=${fim}&k=${document.getElementById("num-clusters").value}&mcirc=${inputMunicipio.value}`);
-            if (!resMapa.ok) throw new Error(`Erro HTTP ${resMapa.status}`);
-            const dataMapa = await resMapa.json();
+            const res = await fetch(`/api/mapa_clusters?group_by=${group_by}&inicio=${inicio}&fim=${fim}`);
+            const data = await res.json();
 
-            if (dataMapa.mapa_clusters) {
-                mapClusters.src = `${dataMapa.mapa_clusters}?v=${Date.now()}`;
-                mapClusters.style.display = "block";
-            } else console.error("Resposta inesperada da API de clusters:", dataMapa);
+            if (data.error) {
+                console.error(data.error);
+                return;
+            }
+
+            const geojson = data.geojson;
+
+            // === Criar mapa ===
+            if (!mapa) {
+                mapa = L.map('mapa_clusters').setView([-22.9, -43.2], 7);
+
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '© OpenStreetMap'
+                }).addTo(mapa);
+            }
+
+            // === Remover camada anterior ===
+            if (camadaGeo) {
+                mapa.removeLayer(camadaGeo);
+            }
+
+            // === Nova camada ===
+            camadaGeo = L.geoJSON(geojson, {
+
+                style: function (feature) {
+                    return {
+                        fillColor: feature.properties.color,
+                        weight: 1,
+                        color: '#ccc',
+                        fillOpacity: 1
+                    };
+                },
+
+                onEachFeature: function (feature, layer) {
+                    const nome = feature.properties.nome || "Região";
+                    const cluster = feature.properties.cluster;
+
+                    // Tooltip ao passar o mouse
+                    layer.bindTooltip(
+                        `<b>${nome}</b><br>Cluster: ${cluster}`,
+                        { sticky: true }
+                    );
+
+                    // Hover visual
+                    layer.on({
+                        mouseover: function (e) {
+                            e.target.setStyle({
+                                weight: 2,
+                                color: '#000',
+                                fillOpacity: 1
+                            });
+                        },
+                        mouseout: function (e) {
+                            camadaGeo.resetStyle(e.target);
+                        }
+                    });
+                }
+
+            }).addTo(mapa);
+
+            // === Ajustar zoom automaticamente ===
+            mapa.fitBounds(camadaGeo.getBounds());
+
         } catch (err) {
-            console.error("Erro ao atualizar mapa dos clusters:", err);
+            console.error("Erro ao carregar mapa:", err);
         }
     }
-
     // ===== Aplicar filtros =====
     btnAplicar.addEventListener("click", async () => {
         const municipioValido = municipios.find(m => m.toLowerCase() === inputMunicipio.value.toLowerCase());

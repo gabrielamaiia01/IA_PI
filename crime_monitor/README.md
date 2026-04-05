@@ -1,0 +1,1 @@
+![Preview](https://raw.githubusercontent.com/gabrielamaiia01/IA_PI/main/crime_monitor/frontend/static/img/logo.png)

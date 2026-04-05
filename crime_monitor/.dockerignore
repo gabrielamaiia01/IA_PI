@@ -1,0 +1,30 @@
+# ===== Python =====
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Ignorar qualquer .env em qualquer pasta
+**/.env
+
+# ===== Node =====
+node_modules/
+
+# ===== Logs =====
+*.log
+
+# ===== Build =====
+dist/
+build/
+
+# ===== CSV =====
+exports/*.csv
+logs/*.csv
+
+# ===== Git =====
+.git/
+
+backend/db/crime_bd.sql
+backend/.env
+

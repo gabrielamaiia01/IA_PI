@@ -44,8 +44,21 @@ python -m venv venv
 venv\Scripts\activate
 ```
 
+### 7. Ative o PSQL
 
-### 7. Crie o banco de dados
+Execute no terminal (com o psql instalado):
+
+```bash
+psql -U <usuario>
+```
+
+Substitua <usuario> pelo nome do seu usuário no PostgreSQL. Exemplo:
+
+```bash
+psql -U postgres
+```
+
+### 8. Crie o banco de dados
 
 Execute o script SQL no PostgreSQL.
 
@@ -70,6 +83,9 @@ DB_USER=postgres
 DB_PASSWORD=sua_senha
 DB_HOST=localhost
 DB_PORT=5432
+OPENROUTER_API_KEY=sua_chave_de_api
+IP_OR_HOST=127.0.0.1
+FLASK_SECRET_KEY=sua_chave_super_secreta
 ```
 
 Essas variáveis serão usadas para configurar a conexão com o banco de dados PostgreSQL.
@@ -119,6 +135,66 @@ IA_PI/
 │
 └── README.md
 ```
+
+### Como executar os testes
+
+O projeto contém dois tipos de testes:
+
+**1. Testes unitários do frontend (Jest)**
+
+**2. Testes funcionais do backend (Selenium)**
+
+A seguir está a forma correta de executar cada um.
+
+## ✔️ 1. Testes Unitários (Jest)
+
+Certifique-se de estar na pasta crime_monitor.
+
+▶️ Instale as dependências JS (caso seja a primeira vez)
+```bash
+npm install
+```
+
+▶️ Execute cada teste separadamente
+
+🔹 Testes de previsão
+
+```bash
+npx jest frontend/static/js/tests/testes_unitarios_jest_previsao.test.js
+```
+
+🔹 Testes do dashboard
+```bash
+npx jest frontend/static/js/tests/testes_unitarios_jest_dashboard.test.js
+```
+
+🔹 Testes de agrupamento
+```bash
+npx jest frontend/static/js/tests/testes_unitarios_jest_agrupamento.test.js
+```
+
+## ✔️ 2. Testes Funcionais (Selenium)
+
+⚠️ IMPORTANTE: Antes de rodar os testes Selenium, o servidor Flask deve estar rodando.
+
+Ou seja, abra um terminal e inicie o backend:
+
+```bash
+python backend/app.py
+```
+
+Depois, em outro terminal, execute o teste Selenium:
+
+```bash
+python backend/test_selenium/testes_funcionais_selenium.py
+```
+
+Isso garante que o navegador automatizado consiga acessar o sistema em:
+
+```bash
+http://127.0.0.1:5000
+```
+
 ### 🛠️ Tecnologias utilizadas
 - **Python 3**
 

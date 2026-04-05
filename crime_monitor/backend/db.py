@@ -4,7 +4,8 @@ import os
 import pandas as pd
 from dotenv import load_dotenv
 from urllib.parse import urlparse
- 
+import time
+
 # === 1. Carregar variáveis do arquivo .env ===
 load_dotenv()
  
@@ -14,20 +15,22 @@ DB_PASSWORD = os.getenv("DB_PASSWORD")
 DB_HOST = os.getenv("DB_HOST")
 DB_PORT = os.getenv("DB_PORT")
  
-def get_connection():
-    DATABASE_URL = os.getenv("DATABASE_URL")
-    if DATABASE_URL:
-        return psycopg2.connect(DATABASE_URL)
-    
-    # fallback local
-    return psycopg2.connect(
-        dbname=os.getenv("DB_NAME"),
-        user=os.getenv("DB_USER"),
-        password=os.getenv("DB_PASSWORD"),
-        host=os.getenv("DB_HOST"),
-        port=os.getenv("DB_PORT")
-    )
- 
+def get_connection(retries=10, delay=3):
+    for i in range(retries):
+        try:
+            return psycopg2.connect(
+                host=os.environ.get("DB_HOST", "db"),
+                port=int(os.environ.get("DB_PORT", 5432)),
+                dbname=os.environ.get("DB_NAME", "crimes_RJ"),
+                user=os.environ.get("DB_USER", "postgres"),
+                password=os.environ.get("DB_PASSWORD", "crimes"),
+            )
+        except psycopg2.OperationalError:
+            print(f"Banco não pronto (tentativa {i+1}/{retries})...")
+            time.sleep(delay)
+
+    raise Exception("Não conseguiu conectar ao Postgres.")
+
 def load_csv():
     """Carrega o CSV de forma segura"""
     # Caminho absoluto relativo a este arquivo
@@ -66,7 +69,7 @@ def insert_data(df):
     for idx, row in enumerate(df.itertuples(index=False, name=None), start=1):
         try:
             cursor.execute("""
-                INSERT INTO public.dados_reais
+                INSERT INTO dados_reais
                 (cisp, mcirc, mes, ano, letalidade_violenta, tentat_hom, estupro,
                 lesao_corp_culposa, roubo_veiculo, estelionato, apreensao_drogas,
                 trafico_drogas, apf, pessoas_desaparecidas, encontro_cadaver,

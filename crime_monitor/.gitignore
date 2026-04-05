@@ -1,1 +1,5 @@
 venv/
+
+frontend/static/css/associacao.css
+frontend/static/css/js/associacao.js
+frontend/pages/associacao.html

@@ -26,12 +26,72 @@ document.addEventListener("DOMContentLoaded", async () => {
                 datalist.appendChild(option);
             });
     });
+    function getColor(valor) {
+        valor = Number(valor) || 0;
 
+        // Escala original até 10
+        if (valor <= 10) {
+            return valor > 9 ? '#800026' :
+                valor > 8 ? '#bd0026' :
+                valor > 7 ? '#e31a1c' :
+                valor > 6 ? '#fc4e2a' :
+                valor > 5 ? '#fd8d3c' :
+                valor > 4 ? '#feb24c' :
+                valor > 3 ? '#fed976' :
+                valor > 2 ? '#ffeda0' :
+                valor > 1 ? '#fff7bc' :
+                            '#ffffe5';
+        }
+
+        // ==========================
+        // Escurecer acima de 10
+        // ==========================
+        const maxValor = 50; // limite máximo esperado (ajuste se quiser)
+        const t = Math.min((valor - 10) / (maxValor - 10), 1);
+
+        // Cor base (#800026)
+        const r1 = 128, g1 = 0, b1 = 38;
+
+        // Preto (#000000)
+        const r2 = 0, g2 = 0, b2 = 0;
+
+        // Interpolação
+        const r = Math.round(r1 * (1 - t) + r2 * t);
+        const g = Math.round(g1 * (1 - t) + g2 * t);
+        const b = Math.round(b1 * (1 - t) + b2 * t);
+
+        return `rgb(${r}, ${g}, ${b})`;
+    }
     // ===========================
     // 2. Carregar mapa temático
     // ===========================
-    async function loadMapImage(groupBy = "mcirc") {
-        if (!mapImg) return;
+    let mapa = null;
+    let camadaGeo = null;
+
+    const nomesBonitos = {
+        letalidade_violenta: "Letalidade Violenta",
+        hom_doloso: "Homicídio Doloso",
+        latrocinio: "Latrocínio",
+        hom_por_interv_policial: "Intervenção Policial",
+        tentat_hom: "Tentativa de Homicídio",
+        lesao_corp_dolosa: "Lesão Corporal Dolosa",
+        estupro: "Estupro",
+        lesao_corp_culposa: "Lesão Corporal Culposa",
+        roubo_veiculo: "Roubo de Veículo",
+        roubo_rua: "Roubo de Rua",
+        roubo_comercio: "Roubo a Comércio",
+        roubo_residencia: "Roubo a Residência",
+        estelionato: "Estelionato",
+        apreensao_drogas: "Apreensão de Drogas",
+        trafico_drogas: "Tráfico de Drogas",
+        apf: "APF",
+        pessoas_desaparecidas: "Pessoas Desaparecidas",
+        encontro_cadaver: "Encontro de Cadáver",
+        registro_ocorrencias: "Registro de Ocorrências",
+        furto_veiculos: "Furto de Veículos"
+    };
+
+      async function loadMapImage(groupBy = "mcirc", coluna = "letalidade_violenta") {
 
         const dataInicio = document.getElementById("data-inicio").value;
         const dataFim = document.getElementById("data-fim").value;
@@ -43,17 +103,84 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (municipio) params.append("municipio", municipio);
 
         try {
-            const response = await fetch(`/api/map_image/${groupBy}?${params.toString()}`);
+            // 🔥 AGORA COM COLUNA NA URL
+            const response = await fetch(`/api/map_image/${groupBy}/${coluna}?${params.toString()}`);
             const data = await response.json();
-            if (data.image_url) mapImg.src = data.image_url;
-            else mapImg.src = "";
+
+            if (data.error) {
+                console.error(data.error);
+                return;
+            }
+
+            const geojson = typeof data.geojson === "string"
+                ? JSON.parse(data.geojson)
+                : data.geojson;
+
+            const colunaAtual = data.coluna;
+            const label = nomesBonitos[colunaAtual] || colunaAtual;
+
+            if (!mapa) {
+                mapa = L.map('map').setView([-22.9, -43.2], 7);
+
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '© OpenStreetMap'
+                }).addTo(mapa);
+
+                setTimeout(() => mapa.invalidateSize(), 100);
+            }
+
+            if (camadaGeo) {
+                mapa.removeLayer(camadaGeo);
+            }
+
+            camadaGeo = L.geoJSON(geojson, {
+
+                style: function (feature) {
+                    const valor = feature.properties[colunaAtual];
+
+                    return {
+                        fillColor: getColor(valor),
+                        weight: 1,
+                        color: '#ccc',
+                        fillOpacity: 1
+                    };
+                },
+
+                onEachFeature: function (feature, layer) {
+
+                    const nome = feature.properties.nome || "Região";
+                    const valor = feature.properties[colunaAtual];
+
+                    layer.bindTooltip(
+                        `<b>${nome}</b><br>${label}: ${valor}`,
+                        { sticky: true }
+                    );
+
+                    layer.on({
+                        mouseover: function (e) {
+                            e.target.setStyle({
+                                weight: 2,
+                                color: '#000',
+                                fillOpacity: 0.9
+                            });
+                        },
+                        mouseout: function (e) {
+                            camadaGeo.resetStyle(e.target);
+                        }
+                    });
+                }
+
+            }).addTo(mapa);
+
+            mapa.fitBounds(camadaGeo.getBounds());
+
         } catch (err) {
             console.error("Erro ao carregar mapa:", err);
         }
     }
 
-    document.getElementById("map-group").addEventListener("change", (e) => loadMapImage(e.target.value));
-
+    document.getElementById("map-group").addEventListener("change", (e) => loadMapImage(e.target.value, document.getElementById("map-column").value));
+    document.getElementById("map-column").addEventListener("change", (e) => loadMapImage(document.getElementById("map-group").value, e.target.value));
     // ===========================
     // 3. Carregar Dashboard
     // ===========================
