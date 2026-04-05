@@ -44,7 +44,7 @@ python -m venv venv
 venv\Scripts\activate
 ```
 
-### 7. Ative o PSQL
+### 7. Acesse o PSQL
 
 Execute no terminal (com o psql instalado):
 
@@ -74,7 +74,7 @@ psql -U \-h \-p <5432> -W -f
 psql -U postgres -h localhost -p 5432 -W -f backend/db/crime_bd.sql
 ```
 
-### 8. Crie o arquivo .env
+### 9. Crie o arquivo .env
 
 Antes de rodar o sistema, crie um arquivo chamado .env dentro da pasta backend/ com as seguintes variáveis de ambiente:
 ```bash
@@ -85,25 +85,25 @@ DB_HOST=localhost
 DB_PORT=5432
 OPENROUTER_API_KEY=sua_chave_de_api
 IP_OR_HOST=127.0.0.1
-FLASK_SECRET_KEY=sua_chave_super_secreta
+FLASK_SECRET_KEY=chave_super_secreta
 ```
 
 Essas variáveis serão usadas para configurar a conexão com o banco de dados PostgreSQL.
 
-### 9. Execute o script de conexão com o banco
+### 10. Execute o script de conexão com o banco
 
 ```bash
 python backend/db.py
 ```
 
-### 10. Inicie o servidor Flask
+### 11. Inicie o servidor Flask
 
 ```bash
 
 python backend/app.py
 ```
 
-### 11. Acesse no navegador
+### 12. Acesse no navegador
 
 Abra o endereço abaixo para visualizar o sistema:
 
@@ -136,60 +136,67 @@ IA_PI/
 └── README.md
 ```
 
-### Como executar os testes
+# 🧪 Como executar os testes
 
-O projeto contém dois tipos de testes:
+O projeto possui dois tipos de testes:
 
-**1. Testes unitários do frontend (Jest)**
+- **Testes unitários do frontend (Jest)**
+- **Testes funcionais do backend (Selenium)**
 
-**2. Testes funcionais do backend (Selenium)**
-
-A seguir está a forma correta de executar cada um.
+---
 
 ## ✔️ 1. Testes Unitários (Jest)
 
-Certifique-se de estar na pasta crime_monitor.
+Certifique-se de estar dentro da pasta `crime_monitor` antes de rodar os comandos.
 
-▶️ Instale as dependências JS (caso seja a primeira vez)
+### ▶️ Instale as dependências (se ainda não instalou)
+
 ```bash
 npm install
 ```
 
-▶️ Execute cada teste separadamente
-
-🔹 Testes de previsão
-
+### ▶️ Execute cada teste separadamente
+**🔹Teste da página de Previsão**
 ```bash
 npx jest frontend/static/js/tests/testes_unitarios_jest_previsao.test.js
 ```
 
-🔹 Testes do dashboard
+**🔹 Teste da página de Dashboard**
 ```bash
 npx jest frontend/static/js/tests/testes_unitarios_jest_dashboard.test.js
 ```
 
-🔹 Testes de agrupamento
+**🔹 Teste da página de Agrupamento**
+
 ```bash
 npx jest frontend/static/js/tests/testes_unitarios_jest_agrupamento.test.js
 ```
 
 ## ✔️ 2. Testes Funcionais (Selenium)
+⚠️ Atenção: Antes de rodar os testes Selenium, o servidor Flask deve estar em execução.
 
-⚠️ IMPORTANTE: Antes de rodar os testes Selenium, o servidor Flask deve estar rodando.
 
-Ou seja, abra um terminal e inicie o backend:
+### ▶️ 1. Adicione no .env esta linha:
+
+```bash
+TEST_MODE="1"
+```
+
+Isso vai fazer com que o captcha seja ignorado no login, ou seja, o usuário pode colocar um valor errado no catpcha e mesmo assim vai passar.
+
+### ▶️ 2. Inicie o backend em um terminal:
 
 ```bash
 python backend/app.py
 ```
 
-Depois, em outro terminal, execute o teste Selenium:
+### ▶️ 3. Em outro terminal, execute o teste Selenium:
 
 ```bash
 python backend/test_selenium/testes_funcionais_selenium.py
 ```
 
-Isso garante que o navegador automatizado consiga acessar o sistema em:
+O Selenium abrirá o navegador automaticamente e realizará os testes acessando:
 
 ```bash
 http://127.0.0.1:5000
@@ -197,13 +204,9 @@ http://127.0.0.1:5000
 
 ### 🛠️ Tecnologias utilizadas
 - **Python 3**
-
 - **Flask**
-
 - **PostgreSQL**
-
 - **Pandas / NumPy / Scikit-Learn**
-
 - **HTML / CSS / JavaScript**
 
 ### 🧑‍💻 Equipe
