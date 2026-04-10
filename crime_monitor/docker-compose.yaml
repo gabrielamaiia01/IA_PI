@@ -1,12 +1,12 @@
+version: "3.9"
+
 services:
   db:
     image: postgres:15
     container_name: crime_db
     restart: always
-    environment:
-      POSTGRES_DB: crimes_RJ
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: crimes
+    env_file:
+      - .env
     ports:
       - "5432:5432"
     volumes:
@@ -21,16 +21,8 @@ services:
       - "5000:5000"
     depends_on:
       - db
-    environment:
-      DB_NAME: crimes_RJ
-      DB_USER: postgres
-      DB_PASSWORD: crimes
-      DB_HOST: db
-      DB_PORT: 5432
-      OPENROUTER_API_KEY: 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
-      IP_OR_HOST: 0.0.0.0
-      FLASK_SECRET_KEY: chave_super_secreta_de_teste_123
-      TEST_MODE: "0"
+    env_file:
+      - .env
 
 volumes:
   postgres_data:
