@@ -26,39 +26,32 @@ document.addEventListener("DOMContentLoaded", async () => {
                 datalist.appendChild(option);
             });
     });
-    function getColor(valor) {
+
+    function getColor(valor, min, max) {
         valor = Number(valor) || 0;
 
-        // Escala original até 10
-        if (valor <= 10) {
-            return valor > 9 ? '#800026' :
-                valor > 8 ? '#bd0026' :
-                valor > 7 ? '#e31a1c' :
-                valor > 6 ? '#fc4e2a' :
-                valor > 5 ? '#fd8d3c' :
-                valor > 4 ? '#feb24c' :
-                valor > 3 ? '#fed976' :
-                valor > 2 ? '#ffeda0' :
-                valor > 1 ? '#fff7bc' :
-                            '#ffffe5';
+        if (max === min) return '#ffffe5'; // evita divisão por zero
+
+        // Normaliza entre 0 e 1
+        const t = (valor - min) / (max - min);
+
+        // Gradiente: amarelo -> vermelho -> preto
+        let r, g, b;
+
+        if (t < 0.5) {
+            // #ffffe5 → #bd0026
+            const t2 = t * 2;
+
+            r = Math.round(255 * (1 - t2) + 189 * t2);
+            g = Math.round(255 * (1 - t2) + 0 * t2);
+            b = Math.round(229 * (1 - t2) + 38 * t2); // 🔥 229 ao invés de 178
+        } else {
+            // vermelho (#bd0026) → preto (#000000)
+            const t2 = (t - 0.5) * 2;
+            r = Math.round(189 * (1 - t2));
+            g = Math.round(0);
+            b = Math.round(38 * (1 - t2));
         }
-
-        // ==========================
-        // Escurecer acima de 10
-        // ==========================
-        const maxValor = 50; // limite máximo esperado (ajuste se quiser)
-        const t = Math.min((valor - 10) / (maxValor - 10), 1);
-
-        // Cor base (#800026)
-        const r1 = 128, g1 = 0, b1 = 38;
-
-        // Preto (#000000)
-        const r2 = 0, g2 = 0, b2 = 0;
-
-        // Interpolação
-        const r = Math.round(r1 * (1 - t) + r2 * t);
-        const g = Math.round(g1 * (1 - t) + g2 * t);
-        const b = Math.round(b1 * (1 - t) + b2 * t);
 
         return `rgb(${r}, ${g}, ${b})`;
     }
@@ -133,13 +126,18 @@ document.addEventListener("DOMContentLoaded", async () => {
                 mapa.removeLayer(camadaGeo);
             }
 
+            const valores = geojson.features.map(f => Number(f.properties[colunaAtual]) || 0);
+
+            const min = Math.min(...valores);
+            const max = Math.max(...valores);
+
             camadaGeo = L.geoJSON(geojson, {
 
                 style: function (feature) {
                     const valor = feature.properties[colunaAtual];
 
                     return {
-                        fillColor: getColor(valor),
+                        fillColor: getColor(valor, min, max),
                         weight: 1,
                         color: '#ccc',
                         fillOpacity: 1
