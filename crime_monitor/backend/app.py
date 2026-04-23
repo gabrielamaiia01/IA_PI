@@ -1,4 +1,4 @@
-from flask import Flask, render_template, jsonify, request, request, send_file, session, flash, redirect, url_for
+from flask import Flask, render_template, jsonify, request, send_file, session, flash, redirect, url_for
 import random
 import string
 import pandas as pd
@@ -57,7 +57,18 @@ from captcha.image import ImageCaptcha
 import shap
 
 import networkx as nx
-# ... (seus imports existentes)
+
+# ===========================
+# Variáveis globais de estado
+# ===========================
+map_data = {}
+mapa_clusters_data = {}
+payload_dashboard = {}
+payload_agrupamentos = {}
+kmeans = None
+df_clusters_global = None
+dados_scaled_global = None
+dados_cluster_global = None
 
 # ===========================
 # Decorator de Autenticação
@@ -74,12 +85,6 @@ def login_required(f):
             return redirect(url_for('login'))
         return f(*args, **kwargs)
     return decorated_function
-
-# ----------------------------
-# Config: modelo de geração
-# ----------------------------
-# Usa FLAN-T5 small por ser leve e gerar textos coerentes.
-# Se quiser outro modelo (pt-br), substitua o string abaixo.
 
 warnings.filterwarnings("ignore")
 
@@ -162,15 +167,11 @@ try:
 except Exception as e:
     print(f"✗ Erro ao carregar modelo: {e}")
 
-df_clusters_global = None
-dados_scaled_global = None
-dados_cluster_global = None
 
 # ===========================
 # Função para carregar dados
 # ===========================
 def load_data():
-    # usa caminho absoluto para evitar problemas de working directory
     if not os.path.exists(DATA_PATH):
         raise FileNotFoundError(f"Arquivo de dados não encontrado: {DATA_PATH}")
     df = pd.read_csv(DATA_PATH, sep=";", encoding="latin1")
@@ -202,16 +203,7 @@ def gerar_drivers_principais(modelo, df, features_dict, n_drivers=3):
     """
     Identifica as variáveis que mais influenciaram a MUDANÇA da previsão
     entre o mês atual e o mês anterior usando delta-SHAP.
-
-    Agora o driver é baseado em:
-        |SHAP_atual - SHAP_anterior|
-
-    Isso mede precisamente quanto a contribuição da feature mudou.
     """
-
-    # ---------------------------
-    # Garantias básicas
-    # ---------------------------
     if not isinstance(df, pd.DataFrame):
         df = pd.DataFrame([df])
 
@@ -222,16 +214,10 @@ def gerar_drivers_principais(modelo, df, features_dict, n_drivers=3):
     df['mes'] = df['mes'].astype(int)
     df['ano'] = df['ano'].astype(int)
 
-    # ---------------------------
-    # Extrair dados Mês Atual
-    # ---------------------------
     X_current = pd.DataFrame([features_dict])
     mes = int(features_dict['mes'])
     ano = int(features_dict['ano'])
 
-    # ---------------------------
-    # Encontrar Mês Anterior
-    # ---------------------------
     mes_ant = mes - 1
     ano_ant = ano
     if mes_ant == 0:
@@ -240,45 +226,28 @@ def gerar_drivers_principais(modelo, df, features_dict, n_drivers=3):
 
     X_prev = df[(df['mes'] == mes_ant) & (df['ano'] == ano_ant)].copy()
 
-    # fallback (pega mês disponível mais recente antes do atual)
     if X_prev.empty:
         X_prev = df[df['ano'] <= ano].sort_values(['ano', 'mes']).tail(1)
 
-    # média das features do mês anterior
     X_prev_numeric = X_prev.select_dtypes(include=['number'])
     X_prev_mean = X_prev_numeric.mean().to_frame().T
-
-    # Alinhar colunas com X_current
     X_prev_mean = X_prev_mean.reindex(columns=X_current.columns, fill_value=0)
 
-    # ---------------------------
-    # Calcular SHAP atual
-    # ---------------------------
     explainer = shap.Explainer(modelo, X_prev_mean)
     shap_current = explainer(X_current)
     shap_prev = explainer(X_prev_mean)
 
-    # Valores SHAP como vetores
     sh_current = shap_current.values[0]
     sh_prev = shap_prev.values[0]
 
-    # ---------------------------
-    # Calcular DELTA-SHAP
-    # ---------------------------
     delta_shap = {}
     for i, feature in enumerate(X_current.columns):
         if feature in ['mes', 'ano', 'cisp']:
             continue
         delta_shap[feature] = abs(sh_current[i] - sh_prev[i])
 
-    # ---------------------------
-    # Selecionar top N variáveis
-    # ---------------------------
     top = sorted(delta_shap.items(), key=lambda x: x[1], reverse=True)[:n_drivers]
 
-    # ---------------------------
-    # Criar descrições naturais
-    # ---------------------------
     drivers = []
     for feature, score in top:
         old = X_prev_mean[feature].iloc[0]
@@ -336,7 +305,6 @@ def classificar_risco(pred, df):
 
 def salvar_previsao_banco(features_dict, prediction_value):
 
-    # Se não houver nem DATABASE_URL nem configurações locais, não salva
     if not DATABASE_URL and not all([DB_NAME, DB_USER, DB_PASSWORD, DB_HOST, DB_PORT]):
         print("Configurações de banco ausentes — pulando salvamento no banco.")
         return
@@ -382,68 +350,43 @@ def salvar_previsao_banco(features_dict, prediction_value):
 def generate_distinct_colors(k, fixed_colors=None):
     """
     Gera k cores distintas, evitando colisão com uma lista de cores fixas.
-    Retorna cores em hexadecimal.
-    :param k: número de cores a gerar
-    :param fixed_colors: lista de cores hex existentes a evitar
-    :return: lista de cores hex
     """
     if fixed_colors is None:
         fixed_colors = []
 
-    # Converte cores fixas para RGB
     print(f"Fixed colors: {fixed_colors}")
     fixed_rgb = [mcolors.to_rgb(c) for c in fixed_colors.values()]
 
-    colors = []
+    colors_list = []
     attempt = 0
-    while len(colors) < k and attempt < k * 10:
-        # HSV equidistante
+    while len(colors_list) < k and attempt < k * 10:
         h = random.random()
-        s = 0.7 + 0.3 * random.random()  # saturação entre 0.7 e 1
-        v = 0.8 + 0.2 * random.random()  # valor entre 0.8 e 1
+        s = 0.7 + 0.3 * random.random()
+        v = 0.8 + 0.2 * random.random()
         rgb = colorsys.hsv_to_rgb(h, s, v)
 
-        # Verifica se está suficientemente distante das cores fixas e já geradas
         def is_distinct(rgb_new):
-            threshold = 0.3  # distância mínima Euclidiana no espaço RGB
-            for r in fixed_rgb + [mcolors.to_rgb(c) for c in colors]:
+            threshold = 0.3
+            for r in fixed_rgb + [mcolors.to_rgb(c) for c in colors_list]:
                 dist = sum((a - b) ** 2 for a, b in zip(rgb_new, r)) ** 0.5
                 if dist < threshold:
                     return False
             return True
 
         if is_distinct(rgb):
-            colors.append('#{:02x}{:02x}{:02x}'.format(int(rgb[0]*255), int(rgb[1]*255), int(rgb[2]*255)))
+            colors_list.append('#{:02x}{:02x}{:02x}'.format(int(rgb[0]*255), int(rgb[1]*255), int(rgb[2]*255)))
 
         attempt += 1
 
-    # Se não conseguiu gerar suficientes, completa com cores aleatórias
-    while len(colors) < k:
-        colors.append('#{:06x}'.format(random.randint(0, 0xFFFFFF)))
+    while len(colors_list) < k:
+        colors_list.append('#{:06x}'.format(random.randint(0, 0xFFFFFF)))
 
-    return colors
+    return colors_list
 
-# ----------------------------
-# Função que usa o modelo para gerar descrições por gráfico
-# ----------------------------
-# --- Inicializa modelo local (uma vez) ---
 
-# Caminho local do modelo Mistral-7B-Instruct-v0.3
-# CORREÇÃO 2: Função de geração com fallback
 def gerar_texto_gpt4o(prompt, max_tokens=800, temperature=0.7, retries=2, wait=3):
     """
     Gera texto com o modelo GPT 4o (openai/gpt-4o-mini) via OpenRouter.
-    Permite retries em caso de falha temporária.
-    
-    Args:
-        prompt (str): Prompt de entrada.
-        max_tokens (int): Máximo de tokens.
-        temperature (float): Criatividade do modelo.
-        retries (int): Número de tentativas em caso de falha.
-        wait (int): Segundos para aguardar entre tentativas.
-        
-    Returns:
-        str: Texto gerado ou mensagem de erro.
     """
     url = "https://openrouter.ai/api/v1/chat/completions"
     headers = {
@@ -465,35 +408,28 @@ def gerar_texto_gpt4o(prompt, max_tokens=800, temperature=0.7, retries=2, wait=3
             texto = resposta["choices"][0]["message"]["content"]
             return texto.strip()
         except requests.exceptions.RequestException as e:
-            print(f"[ERRO LLAMA3] Tentativa {attempt+1} de {retries+1}: {e}")
+            print(f"[ERRO GPT4O] Tentativa {attempt+1} de {retries+1}: {e}")
             if attempt < retries:
                 time.sleep(wait)
             else:
                 return "Não foi possível gerar análise automática no momento. Consulte os gráficos."
         except Exception as e:
-            print(f"[ERRO LLAMA3] Problema ao processar resposta: {e}")
+            print(f"[ERRO GPT4O] Problema ao processar resposta: {e}")
             return "Não foi possível gerar análise automática no momento. Consulte os gráficos."
+
             
 # =========================
 # FUNÇÃO DE ANÁLISES
 # =========================
 def gerar_descricoes_dashboard(payload, group_by):
     """
-    Gera descrições automáticas para os gráficos, dividindo prompts para cada gráfico.
+    Gera descrições automáticas para os gráficos do dashboard.
     """
     descricoes = {
         "linha_evolucao": "Análise não disponível.",
         "barras_correlacao": "Análise não disponível.",
         "scatter": "Análise não disponível.",
         "mapa": "Análise não disponível."
-    }
-
-    base_url = "http://localhost:5000"
-    params_map = {
-        "inicio": payload.get("inicio", "2003-01-01"),
-        "fim": payload.get("fim", "2025-07-31"),
-        "municipio": payload.get("municipio"),
-        "group_by": group_by
     }
 
     # ================== EVOLUÇÃO TEMPORAL ==================
@@ -556,7 +492,6 @@ Analise os dados de dispersão e produza uma resposta curta (2-3 frases) em port
     descricoes["scatter"] = gerar_texto_gpt4o(prompt_scatter)
 
     # ================== MAPA TEMÁTICO ==================
-    # map_data é o JSON retornado pelo map_image
     group_label = {
         "mcirc": "município",
         "cisp": "CISP",
@@ -564,11 +499,14 @@ Analise os dados de dispersão e produza uma resposta curta (2-3 frases) em port
         "risp": "RISP"
     }.get(group_by, "agrupamento")
 
-    if map_data.get("data"):
+    # Usa map_data do payload ou da variável global
+    md = payload.get("map_data") or map_data
+
+    if md and md.get("data"):
         texto_map = f"Letalidade violenta por {group_label}:\n" + "\n".join([
             f"• {item.get('NM_MUN', item.get(group_by, 'Desconhecido'))} "
             f"({item.get('CD_MUN', '-')}) — {int(item.get('letalidade_violenta', 0))}"
-            for item in map_data["data"]
+            for item in md["data"]
             if item.get('letalidade_violenta', 0) > 0
         ])
         resumo_mapa = texto_map.strip() or f"Nenhuma letalidade registrada por {group_label}."
@@ -665,23 +603,34 @@ def criar_graficos_temp_dashboard(payload, tmp_dir, group_by):
         saved["scatter"] = caminho
 
     # ===============================
-    # 🗺️ Mapa - SOLUÇÃO: Chamar a função diretamente
+    # Mapa — usa map_data do payload ou global
     # ===============================
     try:
-        # Copia a imagem gerada para o diretório temporário
-        if map_data and map_data.get("image_url"):
-            # Remove o prefixo /static/img/
-            img_filename = map_data["image_url"].split('/')[-1]
-            source_path = os.path.join(MAP_FOLDER, img_filename)
-            
-            if os.path.exists(source_path):
-                dest_path = os.path.join(tmp_dir, "mapa.png")
-                import shutil
-                shutil.copy(source_path, dest_path)
-                saved["mapa"] = dest_path
+        md = payload.get("map_data") or map_data
+        if md and md.get("geojson"):
+            # Gerar imagem do mapa usando geopandas e matplotlib
+            geojson_str = md.get("geojson")
+
+            if isinstance(geojson_str, str):
+                geojson_data = json.loads(geojson_str)
             else:
-                print(f"[AVISO] Imagem do mapa não encontrada: {source_path}")
-                        
+                geojson_data = geojson_str  # segurança extra
+
+            gdf = gpd.GeoDataFrame.from_features(geojson_data["features"])
+            coluna = md.get("coluna", "letalidade_violenta")
+            if coluna in gdf.columns and not gdf.empty:
+                fig, ax = plt.subplots(1, 1, figsize=(10, 8))
+                gdf.plot(column=coluna, ax=ax, legend=True, cmap='Reds', edgecolor='black', linewidth=0.5)
+                ax.set_title(f"Distribuição Geográfica da {coluna.replace('_', ' ').title()}")
+                ax.set_axis_off()  # Remove os eixos para um mapa limpo
+                caminho = os.path.join(tmp_dir, "mapa.png")
+                plt.savefig(caminho, dpi=150, bbox_inches='tight')
+                plt.close(fig)
+                saved["mapa"] = caminho
+            else:
+                print("[AVISO] Dados insuficientes para gerar mapa no PDF — coluna não encontrada ou GDF vazio.")
+        else:
+            print("[AVISO] map_data não disponível ou sem geojson — mapa ignorado no PDF.")
     except Exception as e:
         print(f"[ERRO mapa]: {e}")
         import traceback
@@ -691,11 +640,7 @@ def criar_graficos_temp_dashboard(payload, tmp_dir, group_by):
 
 def gerar_descricoes_agrupamentos(payload, group_by):
     """
-    Gera descrições automáticas para os gráficos de agrupamentos:
-    - Scatter PCA
-    - Perfil médio dos clusters
-    - Importância das variáveis
-    - Mapa dos clusters
+    Gera descrições automáticas para os gráficos de agrupamentos.
     """
     descricoes = {
         "scatter_pca": "Análise não disponível.",
@@ -766,23 +711,16 @@ Analise as importâncias das variáveis e produza uma resposta curta (2-3 frases
         descricoes["importancia_variaveis"] = gerar_texto_gpt4o(prompt_importancia)
 
         # =====================
-        # MAPA DOS CLUSTERS
+        # MAPA DOS CLUSTERS — usa mapa_clusters_data global
         # =====================
-        base_url = f"http://{IP_OR_HOST}:5000"
-        params = {
-            "inicio": payload.get("inicio", "2003-01-01"),
-            "fim": payload.get("fim", "2025-07-31"),
-            "municipio": payload.get("municipio", ""),
-            "group_by": group_by,
-            "k": payload.get("k", 4)
-        }
+        mc = payload.get("mapa_clusters_data") or mapa_clusters_data
 
         resumo_mapa = "Dados de mapa não disponíveis."
         try:
-            if mapa_clusters.get("data"):
+            if mc.get("data"):
                 resumo_mapa = ""
-                shapefile_col = [c for c in mapa_clusters["data"][0].keys() if c != "cluster"][0]
-                for item in mapa_clusters["data"]:
+                shapefile_col = [c for c in mc["data"][0].keys() if c != "cluster"][0]
+                for item in mc["data"]:
                     regiao = item.get(shapefile_col, "N/A")
                     valor = item.get("cluster", -1)
                     resumo_mapa += f"{regiao}: cluster {valor}; "
@@ -872,37 +810,55 @@ def criar_graficos_temp_agrupamentos(payload, tmp_dir, group_by):
         saved["importancia_variaveis"] = caminho
 
     # ===============================
-    # Mapa temático dos clusters — SEM base_url, usando apenas mapa_clusters
+    # Mapa temático dos clusters — usa mapa_clusters_data global
     # ===============================
     try:
-        map_url = mapa_clusters.get("mapa_clusters")  # ex: /static/img/clusters_cisp__.png?v=12345
-        if map_url:
+        mc = payload.get("mapa_clusters_data") or mapa_clusters_data
 
-            # 🔹 Remove parâmetros do tipo ?v=...
-            map_url_clean = map_url.split("?")[0]
+        if mc and mc.get("geojson"):
+            import json
 
-            # 🔹 Extrai apenas o nome do arquivo
-            img_filename = map_url_clean.split("/")[-1]
+            geojson_data = mc["geojson"]
 
-            # 🔹 Caminho real do diretório onde o backend salva as imagens
-            source_path = os.path.join(MAP_FOLDER, img_filename)
+            # 🔥 segurança (caso venha string)
+            if isinstance(geojson_data, str):
+                geojson_data = json.loads(geojson_data)
 
-            if os.path.exists(source_path):
-                dest_path = os.path.join(tmp_dir, "mapa_clusters.png")
-                shutil.copy(source_path, dest_path)
-                saved["mapa_clusters"] = dest_path
+            gdf = gpd.GeoDataFrame.from_features(geojson_data["features"])
+
+            if not gdf.empty and "cluster" in gdf.columns:
+                fig, ax = plt.subplots(1, 1, figsize=(10, 8))
+
+                gdf.plot(
+                    column="cluster",
+                    ax=ax,
+                    cmap="tab10",
+                    legend=True,
+                    edgecolor="black",
+                    linewidth=0.5
+                )
+
+                ax.set_title("Distribuição Geográfica dos Clusters")
+                ax.set_axis_off()
+
+                caminho = os.path.join(tmp_dir, "mapa_clusters.png")
+                plt.savefig(caminho, dpi=150, bbox_inches='tight')
+                plt.close(fig)
+
+                saved["mapa_clusters"] = caminho
             else:
-                print(f"[AVISO] Arquivo do mapa_clusters não encontrado: {source_path}")
-
+                print("[AVISO] GDF vazio ou sem coluna 'cluster'")
+        else:
+            print("[AVISO] mapa_clusters_data sem geojson")
+            
     except Exception as e:
         print(f"[ERRO mapa clusters]: {e}")
-
     return saved
 
 @app.route('/captcha')
 def captcha():
     captcha_text = ''.join(random.choices(string.ascii_uppercase + string.digits, k=4))
-    session['captcha_text'] = captcha_text  # salva no session para validação
+    session['captcha_text'] = captcha_text
 
     image = ImageCaptcha()
     data = image.generate(captcha_text)
@@ -939,15 +895,15 @@ def logout():
 @app.route('/api/dashboard_data')
 @login_required
 def dashboard_data():
+    global payload_dashboard
+
     df = load_data()
     inicio = request.args.get("inicio")
     fim = request.args.get("fim")
     municipio = request.args.get("municipio")
 
-    # Preparar datas
     df["data"] = pd.to_datetime(df["ano"].astype(str) + "-" + df["mes"].astype(str) + "-01")
 
-    # Filtrar por município
     if municipio:
         gdf_mun = gpd.read_file(SHAPEFILES["mcirc"])[["CD_MUN", "NM_MUN"]]
         gdf_mun["CD_MUN"] = gdf_mun["CD_MUN"].astype(str)
@@ -955,13 +911,11 @@ def dashboard_data():
         df = df.merge(gdf_mun, left_on="mcirc", right_on="CD_MUN", how="left")
         df = df[df["NM_MUN"] == municipio]
 
-    # Aplicar filtros de data
     if inicio:
         df = df[df["data"] >= pd.to_datetime(inicio)]
     if fim:
         df = df[df["data"] <= pd.to_datetime(fim)]
 
-    # Caso não haja dados após os filtros
     if df.empty:
         return jsonify({
             "letalidade_violenta_total": 0,
@@ -976,7 +930,6 @@ def dashboard_data():
             "scatter_data": []
         })
 
-    # Agrupamento mensal
     df_grouped = df.groupby(["ano", "mes"]).agg({
         "letalidade_violenta": "sum",
         "hom_doloso": "sum",
@@ -995,13 +948,10 @@ def dashboard_data():
         "roubo_rua": "sum"
     }).reset_index().sort_values(["ano", "mes"]).reset_index(drop=True)
 
-    # KPIs principais
     letalidade_total = int(df_grouped["letalidade_violenta"].sum())
 
-    # === Homicídios dolosos (média do período filtrado) ===
     homicidios_dolosos = df["hom_doloso"].mean() if not df.empty else 0
 
-    # === Comparação com a média do mês anterior à data de início ===
     homicidios_dolosos_pct = None
     if inicio:
         inicio_dt = pd.to_datetime(inicio)
@@ -1011,7 +961,6 @@ def dashboard_data():
             mes_prev = 12
             ano_prev -= 1
 
-        # Carrega dataset completo (sem filtro de data, com filtro de município se existir)
         df_prev = load_data()
         df_prev["data"] = pd.to_datetime(df_prev["ano"].astype(str) + "-" + df_prev["mes"].astype(str) + "-01")
 
@@ -1022,19 +971,17 @@ def dashboard_data():
             df_prev = df_prev.merge(gdf_mun, left_on="mcirc", right_on="CD_MUN", how="left")
             df_prev = df_prev[df_prev["NM_MUN"] == municipio]
 
-        # === Agrupar para garantir médias mensais ===
         df_grouped_periodo = df.groupby(["ano", "mes"])["hom_doloso"].mean().reset_index()
-        homicidios_dolosos = df_grouped_periodo["hom_doloso"].mean()  # média mensal do período
+        homicidios_dolosos = df_grouped_periodo["hom_doloso"].mean()
 
         df_grouped_prev = df_prev.groupby(["ano", "mes"])["hom_doloso"].mean().reset_index()
         df_mes_prev = df_grouped_prev[(df_grouped_prev["ano"] == ano_prev) & (df_grouped_prev["mes"] == mes_prev)]
 
         if not df_mes_prev.empty:
-            media_prev = df_mes_prev["hom_doloso"].iloc[0]  # média mensal do mês anterior
+            media_prev = df_mes_prev["hom_doloso"].iloc[0]
             if media_prev > 0:
                 homicidios_dolosos_pct = ((homicidios_dolosos - media_prev) / media_prev) * 100
 
-    # === Latrocínios (comparação com ano anterior) ===
     latrocinios = int(df_grouped["latrocinio"].sum())
     df_full = load_data()
     df_full["data"] = pd.to_datetime(df_full["ano"].astype(str) + "-" + df_full["mes"].astype(str) + "-01")
@@ -1056,7 +1003,6 @@ def dashboard_data():
 
     variacao_latrocinio_anual_pct = ((latrocinios - soma_ano_ant) / soma_ano_ant) * 100 if soma_ano_ant > 0 else None
 
-    # === Mortes por intervenção policial e tendência ===
     mortes_intervencao_policial = df["hom_por_interv_policial"].mean()
 
     if inicio:
@@ -1093,20 +1039,17 @@ def dashboard_data():
     else:
         tendencia_interv = "Indefinida"
 
-    # Evolução temporal
     df_grouped["Periodo"] = df_grouped["ano"].astype(str) + "-" + df_grouped["mes"].astype(str).str.zfill(2)
     evolucao_temporal = df_grouped[["Periodo", "letalidade_violenta"]].rename(
         columns={"Periodo": "x", "letalidade_violenta": "y"}
     ).to_dict(orient="records")
 
-    # Correlação com outros crimes
     col_corr = ["tentat_hom", "lesao_corp_culposa", "estupro", "estelionato",
                 "apreensao_drogas", "trafico_drogas", "apf", "pessoas_desaparecidas",
                 "encontro_cadaver", "registro_ocorrencias"]
     correlacao_dict = df_grouped[["letalidade_violenta"] + col_corr].corr()["letalidade_violenta"] \
         .drop("letalidade_violenta").to_dict()
 
-    # Scatter
     scatter_data = []
     if "roubo_rua" in df.columns:
         scatter_data = df[["roubo_rua", "letalidade_violenta"]].dropna().to_dict(orient="records")
@@ -1121,12 +1064,10 @@ def dashboard_data():
             return None
         return obj
 
-    # Bloqueia comparação se início for inválido
     if not inicio or pd.to_datetime(inicio) < pd.Timestamp("2003-01-01"):
         homicidios_dolosos_pct = None
         variacao_latrocinio_anual_pct = None
 
-    global payload_dashboard
     payload_dashboard = {
         "letalidade_violenta_total": letalidade_total,
         "homicidios_dolosos": round(homicidios_dolosos, 2),
@@ -1137,7 +1078,8 @@ def dashboard_data():
         "tendencia_mortes_intervencao_policial": tendencia_interv,
         "evolucao_temporal": evolucao_temporal,
         "correlacao_crimes": correlacao_dict,
-        "scatter_data": scatter_data
+        "scatter_data": scatter_data,
+        "map_data": map_data  # inclui map_data atual no payload
     }
 
     return jsonify(replace_invalid({
@@ -1156,7 +1098,6 @@ def dashboard_data():
 # Ignorar captcha quando em TEST_MODE
 @app.before_request
 def desabilitar_captcha_em_teste():
-    
     if os.environ.get("TEST_MODE") == "1":
         session['captcha_text'] = "TESTE"
 
@@ -1189,18 +1130,14 @@ def get_municipios():
 @app.route("/api/map_image/<group_by>/<coluna>")
 @login_required
 def map_image(group_by, coluna="letalidade_violenta"):
+    global map_data
+
     df = load_data()
 
-    # ===========================
-    # Parâmetros
-    # ===========================
     inicio = request.args.get("inicio")
     fim = request.args.get("fim")
     municipio = request.args.get("municipio")
 
-    # ===========================
-    # Validação de coluna
-    # ===========================
     COLUNAS_VALIDAS = [
         "letalidade_violenta",
         "hom_doloso", "latrocinio", "hom_por_interv_policial",
@@ -1215,9 +1152,6 @@ def map_image(group_by, coluna="letalidade_violenta"):
     if coluna not in COLUNAS_VALIDAS:
         return jsonify({"error": "Coluna inválida"}), 400
 
-    # ===========================
-    # Shapefile
-    # ===========================
     shapefile = SHAPEFILES.get(group_by)
     if not shapefile:
         return jsonify({"error": "Agrupamento inválido"}), 400
@@ -1229,9 +1163,6 @@ def map_image(group_by, coluna="letalidade_violenta"):
     if gdf.crs is None:
         gdf = gdf.set_crs(epsg=4326)
 
-    # ===========================
-    # Filtro de data
-    # ===========================
     df["data"] = pd.to_datetime(
         df["ano"].astype(str) + "-" + df["mes"].astype(str) + "-01"
     )
@@ -1242,9 +1173,6 @@ def map_image(group_by, coluna="letalidade_violenta"):
     if fim:
         df = df[df["data"] <= pd.to_datetime(fim)]
 
-    # ===========================
-    # Agrupamento dinâmico
-    # ===========================
     df_grouped = (
         df.groupby(group_by)[coluna]
         .mean()
@@ -1256,9 +1184,6 @@ def map_image(group_by, coluna="letalidade_violenta"):
     df_grouped[group_by] = df_grouped[group_by].astype(str)
     gdf[shapefile_col] = gdf[shapefile_col].astype(str)
 
-    # ===========================
-    # Merge
-    # ===========================
     gdf = gdf.merge(
         df_grouped,
         left_on=shapefile_col,
@@ -1269,9 +1194,6 @@ def map_image(group_by, coluna="letalidade_violenta"):
     gdf[coluna] = gdf[coluna].fillna(0)
     gdf[coluna] = gdf[coluna].astype(float)
 
-    # ===========================
-    # Recorte por município
-    # ===========================
     if municipio:
         municipios_gdf = gpd.read_file(SHAPEFILES["mcirc"])
 
@@ -1291,23 +1213,31 @@ def map_image(group_by, coluna="letalidade_violenta"):
         else:
             return jsonify({"error": "Município não encontrado"}), 404
 
-    # ===========================
-    # Nome amigável
-    # ===========================
     if "NM_MUN" in gdf.columns:
         gdf["nome"] = gdf["NM_MUN"]
     else:
         gdf["nome"] = gdf[shapefile_col]
 
-    # ===========================
-    # GeoJSON
-    # ===========================
     geojson = gdf.to_json()
 
-    return jsonify({
+    # Extrair dados resumidos para uso no PDF
+    cols_para_dados = [shapefile_col, coluna, "nome"]
+    if "NM_MUN" in gdf.columns:
+        cols_para_dados.append("NM_MUN")
+    cols_existentes = [c for c in cols_para_dados if c in gdf.columns]
+    dados_resumo = json.loads(gdf[cols_existentes].to_json(orient="records"))
+
+    result = {
         "geojson": geojson,
-        "coluna": coluna
-    })
+        "coluna": coluna,
+        "data": dados_resumo
+    }
+
+    # Salva na variável global para uso no PDF
+    map_data = result
+
+    return jsonify(result)
+
 # ===========================
 # API - Features do modelo
 # ===========================
@@ -1323,21 +1253,18 @@ def model_features():
 @login_required
 def previsao_api():
     global model
-    df = load_data()  # Função que carrega os dados históricos
+    df = load_data()
     data = request.get_json()
 
     if not model:
         return jsonify({"error": "Modelo não carregado"}), 500
 
-    # === Preparar dados para previsão ===
     X = pd.DataFrame([data['features']], columns=feature_names)
     pred = int(round(model.predict(X)[0]))
 
-    # === Histórico real (soma por mês) ===
     df_hist = df.groupby(['ano', 'mes'])['letalidade_violenta'].sum().reset_index()
     df_hist = df_hist.sort_values(['ano', 'mes'])
 
-    # === Intervalo de confiança via bootstrap ===
     preds_boot = []
     for _ in range(1000):
         sample = df_hist['letalidade_violenta'].sample(len(df_hist), replace=True)
@@ -1345,17 +1272,14 @@ def previsao_api():
     lower = max(np.percentile(preds_boot, 2.5), 0)
     upper = np.percentile(preds_boot, 97.5)
 
-    # === Média histórica mensal ===
     df_hist_media = df.groupby(['ano', 'mes'])['letalidade_violenta'].mean().reset_index()
     df_hist_media = df_hist_media.sort_values(['ano', 'mes'])
     media_historica_valores = df_hist_media['letalidade_violenta'].tolist()
 
-    # === Inicializa previsões e labels (seguro) ===
     prev_sum_map = {}
     prev_avg_map = {}
     prev_labels = []
 
-    # === Buscar previsões do banco ===
     if DATABASE_URL or all([DB_NAME, DB_USER, DB_PASSWORD, DB_HOST, DB_PORT]):
         try:
             conn = get_connection()
@@ -1380,23 +1304,18 @@ def previsao_api():
         except Exception as e:
             print("Erro ao buscar previsões no banco:", e)
 
-
-    # === Dados históricos para gráfico ===
     historico_labels = [f"{int(a)}-{int(m):02d}" for a, m in zip(df_hist['ano'], df_hist['mes'])]
     historico_valores = df_hist['letalidade_violenta'].tolist()
 
-    # === Alinha previsões com histórico (mesmo que não haja dados no banco) ===
     prev_valores_alinhados = [prev_sum_map.get(lbl, 0.0) for lbl in historico_labels]
     media_previsoes_alinhada = [prev_avg_map.get(lbl, 0.0) for lbl in historico_labels]
 
-    # === Informações do período atual ===
     mes = int(data['features'][1])
     ano = int(data['features'][2])
     media_mes_proximo = get_media_mes_proximo(df, mes, ano)
     tendencia = classificar_tendencia(pred, media_mes_proximo)
     risco = classificar_risco(pred, df)
 
-    # === Importância das features (robusto a vários tipos de modelo) ===
     try:
         importance = list(model.feature_importances_)
     except Exception:
@@ -1406,20 +1325,17 @@ def previsao_api():
             importance = [0] * len(feature_names)
     importance_dict = dict(zip(feature_names, importance))
 
-    # === Drivers principais ===
     drivers = gerar_drivers_principais(
-        model,           # modelo REAL
-        df,               # histórico
+        model,
+        df,
         dict(zip(feature_names, data['features'])),
     )
 
-    # === Salvar previsão no banco (não fatal) ===
     try:
         salvar_previsao_banco(dict(zip(feature_names, data['features'])), pred)
     except Exception as e:
         print("Erro ao salvar previsão (não fatal):", e)
 
-    # === Retorna JSON com todas as informações ===
     return jsonify({
         "success": True,
         "previsao_leitura": pred,
@@ -1440,17 +1356,14 @@ def previsao_api():
 @login_required
 def get_cisps():
     try:
-        # Lê o shapefile CISP
         mapa_cisp = gpd.read_file(SHAPEFILES["cisp"])
         coluna_cisp = "cisp"
         codigos_cisp = sorted(mapa_cisp[coluna_cisp].dropna().unique())
 
-        # Lê o shapefile MCIRC
         mapa_mcirc = gpd.read_file(SHAPEFILES["mcirc"])
         coluna_mcirc = "CD_MUN"
         codigos_mcirc = sorted(mapa_mcirc[coluna_mcirc].dropna().unique())
 
-        # ✅ Converte todos os valores para tipos nativos do Python
         codigos_cisp = [int(c) if isinstance(c, (np.integer, int)) else str(c) for c in codigos_cisp]
         codigos_mcirc = [int(m) if isinstance(m, (np.integer, int)) else str(m) for m in codigos_mcirc]
 
@@ -1468,22 +1381,20 @@ def get_cisps():
 @app.route("/api/agrupamentos_data")
 @login_required
 def agrupamentos_data():
+    global df_clusters_global, dados_scaled_global, dados_cluster_global, payload_agrupamentos, kmeans
+
     df = load_data()
     k = int(request.args.get("k", 4))
     inicio = request.args.get("inicio")
     fim = request.args.get("fim")
     municipio = request.args.get("municipio")
 
-    global df_clusters_global, dados_scaled_global, dados_cluster_global
-
-    # Filtragem por data
     df["data"] = pd.to_datetime(df["ano"].astype(str) + "-" + df["mes"].astype(str) + "-01")
     if inicio:
         df = df[df["data"] >= pd.to_datetime(inicio)]
     if fim:
         df = df[df["data"] <= pd.to_datetime(fim)]
 
-    # Filtragem por município
     if municipio:
         try:
             gdf_mun = gpd.read_file(SHAPEFILES["mcirc"])[["CD_MUN", "NM_MUN"]]
@@ -1497,7 +1408,6 @@ def agrupamentos_data():
     if df.empty:
         return jsonify({"error": "Sem dados após filtragem."}), 400
 
-    # Seleção e exclusão das variáveis
     dados_cluster = df.select_dtypes(include=[np.number]).drop(columns=[
         'hom_doloso', 'lesao_corp_morte', 'latrocinio', 'cvli', 'hom_por_interv_policial', 
         'ameaca', 'total_roubos', 'recuperacao_veiculos', 'fase', 'encontro_ossada', 
@@ -1516,7 +1426,6 @@ def agrupamentos_data():
     if dados_cluster.empty:
         return jsonify({"error": "Sem dados numéricos para agrupar."}), 400
 
-    # Imputação e normalização
     colunas = dados_cluster.columns
     dados_imp = pd.DataFrame(
         SimpleImputer(strategy="mean").fit_transform(dados_cluster),
@@ -1524,59 +1433,47 @@ def agrupamentos_data():
     )
     dados_scaled = StandardScaler().fit_transform(dados_imp)
 
-    # KMeans clustering
-    global kmeans
     kmeans = KMeans(n_clusters=k, random_state=42)
     clusters = kmeans.fit_predict(dados_scaled)
     df['cluster'] = clusters
     media_clusters = df.groupby('cluster')[colunas].mean().round(2).to_dict(orient="index")
 
-    # PCA 2D
     pca = PCA(n_components=2)
     pca_result = pca.fit_transform(dados_scaled)
     pca_df = pd.DataFrame(pca_result, columns=["pca1", "pca2"])
     pca_df["cluster"] = clusters
     pca_data = pca_df.to_dict(orient="records")
 
-    # Perfil médio dos clusters
     df_cluster_profile = df.groupby("cluster")[colunas].mean()
 
-    # Remove colunas geográficas
     for col_geo in ["cisp", "aisp", "risp", "mcirc", "ano", "mes"]:
         if col_geo in df_cluster_profile.columns:
             df_cluster_profile = df_cluster_profile.drop(columns=[col_geo])
 
-    # Normaliza para visualização
-
-    # --- Imagem 1: sem 'registro_ocorrencias' ---
     perfil_img_sem = os.path.join(MAP_FOLDER, f"perfil_medio_sem_registro_ocorrencias_{k}.png")
     fig1, ax1 = plt.subplots(figsize=(12, 6))
     df_cluster_profile.drop(columns=['registro_ocorrencias'], errors='ignore').plot(kind="bar", ax=ax1)
     ax1.set_title("Perfil médio dos clusters (sem registro_ocorrencias)")
     ax1.set_ylabel("Intensidade relativa (normalizada)")
     ax1.set_xticklabels([f"Cluster {i}" for i in df_cluster_profile.drop(columns=['registro_ocorrencias'], errors='ignore').index], rotation=0)
-    # Legenda fora do gráfico
-    legend1 = ax1.legend(frameon=True, bbox_to_anchor=(1.02, 1), loc='upper left')  # fora à direita
-    legend1.get_frame().set_facecolor('none')  # fundo transparente
+    legend1 = ax1.legend(frameon=True, bbox_to_anchor=(1.02, 1), loc='upper left')
+    legend1.get_frame().set_facecolor('none')
     plt.tight_layout()
     fig1.savefig(perfil_img_sem, dpi=150, bbox_inches='tight')
     plt.close(fig1)
 
-    # --- Imagem 2: com 'registro_ocorrencias' ---
     perfil_img_com = os.path.join(MAP_FOLDER, f"perfil_medio_com_registro_ocorrencias_{k}.png")
     fig2, ax2 = plt.subplots(figsize=(12, 6))
     df_cluster_profile.plot(kind="bar", ax=ax2)
     ax2.set_title("Perfil médio dos clusters (com registro_ocorrencias)")
     ax2.set_ylabel("Intensidade relativa (normalizada)")
     ax2.set_xticklabels([f"Cluster {i}" for i in df_cluster_profile.index], rotation=0)
-    # Legenda fora do gráfico
     legend2 = ax2.legend(frameon=True, bbox_to_anchor=(1.02, 1), loc='upper left')
     legend2.get_frame().set_facecolor('none')
     plt.tight_layout()
     fig2.savefig(perfil_img_com, dpi=150, bbox_inches='tight')
     plt.close(fig2)
 
-    # Importância das variáveis
     importances = {}
     for col in dados_cluster.columns:
         group_means = df.groupby('cluster')[col].mean()
@@ -1587,7 +1484,6 @@ def agrupamentos_data():
 
     df_clusters_global = df.copy()
 
-    global payload_agrupamentos
     payload_agrupamentos = {
         "media_clusters": media_clusters,
         "pca_data": pca_data,
@@ -1595,7 +1491,8 @@ def agrupamentos_data():
         "perfil_medio_img_sem_registro_ocorrencias": f"/static/img/perfil_medio_sem_registro_ocorrencias_{k}.png",
         "perfil_medio_img_com_registro_ocorrencias": f"/static/img/perfil_medio_com_registro_ocorrencias_{k}.png",
         "perfil_medio_data": df_cluster_profile.to_dict(orient="index"),
-        "importancias": importances_series.to_dict()
+        "importancias": importances_series.to_dict(),
+        "mapa_clusters_data": mapa_clusters_data  # inclui dados do mapa de clusters
     }
 
     return jsonify({
@@ -1608,7 +1505,7 @@ def agrupamentos_data():
         "importancias": importances_series.to_dict()
     })
 
-# cache global para shapefiles já lidos (chave: group_by)
+# cache global para shapefiles já lidos
 _gdf_cache = {}
 
 # ===========================
@@ -1616,10 +1513,10 @@ _gdf_cache = {}
 # ===========================
 @app.route("/api/mapa_clusters")
 @login_required
-def mapa_clusters():
-    global kmeans, df_clusters_global
+def api_mapa_clusters():
+    global kmeans, df_clusters_global, mapa_clusters_data, payload_agrupamentos
 
-    if "kmeans" not in globals() or "df_clusters_global" not in globals():
+    if kmeans is None or df_clusters_global is None:
         return jsonify({"error": "Execute /api/agrupamentos_data primeiro."}), 400
 
     group_by = request.args.get("group_by", "mcirc")
@@ -1632,7 +1529,6 @@ def mapa_clusters():
     if not shapefile or not shapefile_col:
         return jsonify({"error": "Agrupamento inválido"}), 400
 
-    # === Carregar shapefile ===
     gdf = gpd.read_file(shapefile)
 
     if gdf.crs is None:
@@ -1640,10 +1536,8 @@ def mapa_clusters():
     else:
         gdf = gdf.to_crs(epsg=4326)
 
-    # === Dados já clusterizados ===
     df = df_clusters_global.copy()
 
-    # === Filtro por data ===
     df["data"] = pd.to_datetime(df["ano"].astype(str) + "-" + df["mes"].astype(str) + "-01")
 
     if inicio:
@@ -1654,19 +1548,16 @@ def mapa_clusters():
     if group_by not in df.columns:
         return jsonify({"error": f"Coluna '{group_by}' não encontrada."}), 400
 
-    # === Agrupar ===
     df_grouped = df.groupby(group_by).agg({
         "cluster": lambda x: x.mode()[0] if not x.mode().empty else -1
     }).reset_index()
 
-    # === Merge ===
     gdf[shapefile_col] = gdf[shapefile_col].astype(str)
     df_grouped[group_by] = df_grouped[group_by].astype(str)
 
     gdf = gdf.merge(df_grouped, left_on=shapefile_col, right_on=group_by, how="left")
     gdf["cluster"] = gdf["cluster"].fillna(-1).astype(int)
 
-    # === Nome da região (IMPORTANTE) ===
     if "NM_MUN" in gdf.columns:
         gdf["nome"] = gdf["NM_MUN"]
     elif "NM_ESTADO" in gdf.columns:
@@ -1674,7 +1565,6 @@ def mapa_clusters():
     else:
         gdf["nome"] = gdf[shapefile_col]
 
-    # === Cores ===
     default_fixed = {
         0:"#1f77b4",1:"#ff7f0e",2:"#2ca02c",3:"#d62728",
         4:"#9467bd",5:"#8c564b",6:"#e377c2",7:"#17becf",
@@ -1692,16 +1582,32 @@ def mapa_clusters():
 
     gdf["color"] = gdf["cluster"].map(fixed_colors)
 
-    # ==fixed_c= Simplificar geometria (performance) ===
     gdf["geometry"] = gdf["geometry"].simplify(0.01, preserve_topology=True)
 
-    # === Converter para GeoJSON ===
     geojson = json.loads(gdf.to_json())
 
-    return jsonify({
+    # Extrair dados resumidos para PDF
+    cols_dados = [shapefile_col, "cluster", "nome"]
+    cols_existentes = [c for c in cols_dados if c in gdf.columns]
+    dados_resumo = [
+        {c: row[c] for c in cols_existentes}
+        for _, row in gdf[cols_existentes].iterrows()
+    ]
+
+    result = {
         "geojson": geojson,
-        "colors": fixed_colors
-    })
+        "colors": fixed_colors,
+        "data": dados_resumo
+    }
+
+    # Salva na variável global
+    mapa_clusters_data = result
+
+    # Atualiza o payload de agrupamentos com os dados mais recentes do mapa
+    if payload_agrupamentos:
+        payload_agrupamentos["mapa_clusters_data"] = mapa_clusters_data
+
+    return jsonify(result)
 
 @app.route("/api/predizer_cluster", methods=["POST"])
 @login_required
@@ -1713,13 +1619,12 @@ def predizer_cluster():
             return jsonify({"error": "Nenhum dado fornecido."}), 400
 
         k = int(data.get("k", 4))
-        feature_names_cluster= [
+        feature_names_cluster = [
             'cisp', 'mes', 'ano', 'mcirc', 'letalidade_violenta','tentat_hom', 
             'estupro', 'lesao_corp_culposa', 'roubo_veiculo', 'estelionato',
             'apreensao_drogas', 'trafico_drogas', 'apf',
             'pessoas_desaparecidas', 'encontro_cadaver', 'registro_ocorrencias'
         ]
-        # Prepara os dados do usuário
         X_novo = pd.DataFrame([features], columns=feature_names_cluster)
         print(f"Predizendo cluster para k={k} com features: {X_novo.columns.tolist()}")
         cluster_predito = int(kmeans.predict(X_novo)[0])
@@ -1734,23 +1639,26 @@ def predizer_cluster():
         return jsonify({"error": str(e)}), 500
 
 # ----------------------------
-# Rota principal: gera o PDF e retorna
+# Rota: gera o PDF do dashboard
 # ----------------------------
 @app.route("/api/export_dashboard_pdf")
 @login_required
 def export_dashboard_pdf():
-    global payload_dashboard  # ✅ Adicionar essa linha
+    global payload_dashboard
     
     inicio = request.args.get("inicio") or "2003-01-01"
     fim = request.args.get("fim") or "2025-07-31"
     municipio = request.args.get("municipio")
     group_by = request.args.get("group_by") or "mcirc"
-    params = {"inicio":inicio,"fim":fim,"municipio":municipio,"group_by":group_by}
+    params = {"inicio": inicio, "fim": fim, "municipio": municipio, "group_by": group_by}
 
-    # 2) Gerar descrições automáticas
+    # Garante que map_data mais recente esteja no payload
+    payload_dashboard["map_data"] = map_data
+
     try:
         descricoes = gerar_descricoes_dashboard(payload_dashboard, group_by)
-    except:
+    except Exception as e:
+        print(f"Erro ao gerar descrições: {e}")
         descricoes = {
             "linha_evolucao": "Consulte o gráfico de evolução temporal.",
             "barras_correlacao": "Consulte o gráfico de correlações.",
@@ -1758,72 +1666,73 @@ def export_dashboard_pdf():
             "mapa": "Consulte o mapa temático."
         }
 
-    # 3) Criar PDF
     try:
         with tempfile.TemporaryDirectory() as tmpdir:
-            saved_imgs = criar_graficos_temp_dashboard(payload_dashboard,tmpdir,group_by)
+            saved_imgs = criar_graficos_temp_dashboard(payload_dashboard, tmpdir, group_by)
             buffer = io.BytesIO()
             doc = SimpleDocTemplate(buffer, pagesize=A4)
             styles = getSampleStyleSheet()
             story = []
 
-            # Cabeçalho
             story.append(Paragraph("<b>Relatório do Dashboard - Monitor de Criminalidade RJ</b>", styles["Title"]))
-            story.append(Spacer(1,12))
+            story.append(Spacer(1, 12))
             story.append(Paragraph(f"<b>Período:</b> {params['inicio']} – {params['fim']}", styles["Normal"]))
             story.append(Paragraph(f"<b>Município:</b> {params['municipio'] or 'Todos'}", styles["Normal"]))
-            story.append(Spacer(1,20))
+            story.append(Spacer(1, 20))
 
-            # KPIs principais - ✅ CORRIGIDO: usar payload_dashboard
             story.append(Paragraph("<b>Indicadores Principais</b>", styles["Heading2"]))
-            story.append(Paragraph(f"• Letalidade Violenta Total: {payload_dashboard.get('letalidade_violenta_total',0)}", styles["Normal"]))
-            story.append(Paragraph(f"• Homicídios Dolosos (média): {payload_dashboard.get('homicidios_dolosos',0)}", styles["Normal"]))
-            story.append(Paragraph(f"• Soma de latrocínios: {payload_dashboard.get('latrocinios',0)}", styles["Normal"]))
-            story.append(Paragraph(f"• Homícidios Por Intervenção Policial: {payload_dashboard.get('mortes_intervencao_policial',0)}", styles["Normal"]))
-            story.append(Spacer(1,20))
+            story.append(Paragraph(f"• Letalidade Violenta Total: {payload_dashboard.get('letalidade_violenta_total', 0)}", styles["Normal"]))
+            story.append(Paragraph(f"• Homicídios Dolosos (média): {payload_dashboard.get('homicidios_dolosos', 0)}", styles["Normal"]))
+            story.append(Paragraph(f"• Soma de latrocínios: {payload_dashboard.get('latrocinios', 0)}", styles["Normal"]))
+            story.append(Paragraph(f"• Homicídios Por Intervenção Policial: {payload_dashboard.get('mortes_intervencao_policial', 0)}", styles["Normal"]))
+            story.append(Spacer(1, 20))
 
-            # Seções
             sections = [
-                ("linha_evolucao","Evolução Temporal da Letalidade Violenta"),
-                ("barras_correlacao","Correlação entre Crimes e Letalidade"),
-                ("scatter","Relação entre Roubo na Rua e Letalidade"),
-                ("mapa","Distribuição Geográfica da Letalidade")
+                ("linha_evolucao", "Evolução Temporal da Letalidade Violenta"),
+                ("barras_correlacao", "Correlação entre Crimes e Letalidade"),
+                ("scatter", "Relação entre Roubo na Rua e Letalidade"),
+                ("mapa", "Distribuição Geográfica da Letalidade")
             ]
 
-            for chave,titulo in sections:
+            for chave, titulo in sections:
                 story.append(Paragraph(f"<b>{titulo}</b>", styles["Heading2"]))
-                story.append(Spacer(1,6))
-                story.append(Paragraph(descricoes.get(chave,"Análise não disponível."), styles["Normal"]))
-                story.append(Spacer(1,8))
+                story.append(Spacer(1, 6))
+                story.append(Paragraph(descricoes.get(chave, "Análise não disponível."), styles["Normal"]))
+                story.append(Spacer(1, 8))
                 if saved_imgs.get(chave):
-                    story.append(Image(saved_imgs[chave], width=480, height=240 if chave!="scatter" else 300))
-                story.append(Spacer(1,16))
+                    story.append(Image(saved_imgs[chave], width=480, height=240 if chave != "scatter" else 300))
+                story.append(Spacer(1, 16))
 
-            story.append(Spacer(1,20))
-            story.append(Paragraph("<i>Relatório gerado automaticamente com IA (LLaMA 3) - Monitor RJ.</i>", styles["Normal"]))
+            story.append(Spacer(1, 20))
+            story.append(Paragraph("<i>Relatório gerado automaticamente com IA (GPT-4o Mini) - Monitor RJ.</i>", styles["Normal"]))
 
             doc.build(story)
             buffer.seek(0)
-            nome_pdf = f"relatorio_dashboard_{params.get('inicio','sem_data')}.pdf"
+            nome_pdf = f"relatorio_dashboard_{params.get('inicio', 'sem_data')}.pdf"
             return send_file(buffer, as_attachment=True, download_name=nome_pdf, mimetype="application/pdf")
     except Exception as e:
         print(f"[ERRO PDF] {e}")
-        return jsonify({"erro":"Falha ao gerar PDF"}), 500
+        return jsonify({"erro": "Falha ao gerar PDF"}), 500
 
 @app.route("/api/export_agrupamentos_pdf")
 @login_required
 def export_agrupamentos_pdf():
+    global payload_agrupamentos
+
     inicio = request.args.get("inicio") or "2003-01-01"
     fim = request.args.get("fim") or "2025-07-31"
     municipio = request.args.get("municipio")
     group_by = request.args.get("group_by") or "mcirc"
     k = request.args.get("k") or 4
-    params = {"inicio":inicio,"fim":fim,"municipio":municipio,"group_by":group_by, "k": k}
+    params = {"inicio": inicio, "fim": fim, "municipio": municipio, "group_by": group_by, "k": k}
 
-    # 2) Gerar descrições automáticas
+    # Garante que mapa_clusters_data mais recente esteja no payload
+    payload_agrupamentos["mapa_clusters_data"] = mapa_clusters_data
+
     try:
         descricoes = gerar_descricoes_agrupamentos(payload_agrupamentos, group_by)
-    except:
+    except Exception as e:
+        print(f"Erro ao gerar descrições: {e}")
         descricoes = {
             "scatter_pca": "Consulte o gráfico de projeção PCA.",
             "perfil_medio_clusters": "Consulte o gráfico de perfil médio dos clusters.",
@@ -1831,41 +1740,38 @@ def export_agrupamentos_pdf():
             "mapa_clusters": "Consulte o mapa temático dos clusters."
         }
 
-    # 3) Criar PDF
     try:
         with tempfile.TemporaryDirectory() as tmpdir:
-            saved_imgs = criar_graficos_temp_agrupamentos(payload_agrupamentos,tmpdir,group_by)
+            saved_imgs = criar_graficos_temp_agrupamentos(payload_agrupamentos, tmpdir, group_by)
             buffer = io.BytesIO()
             doc = SimpleDocTemplate(buffer, pagesize=A4)
             styles = getSampleStyleSheet()
             story = []
 
-            # Cabeçalho
             story.append(Paragraph("<b>Relatório de Agrupamentos - Monitor de Criminalidade RJ</b>", styles["Title"]))
-            story.append(Spacer(1,12))
+            story.append(Spacer(1, 12))
             story.append(Paragraph(f"<b>Período:</b> {params['inicio']} – {params['fim']}", styles["Normal"]))
             story.append(Paragraph(f"<b>Município:</b> {params['municipio'] or 'Todos'}", styles["Normal"]))
-            story.append(Spacer(1,20))
+            story.append(Spacer(1, 20))
 
-            # Seções
             sections = [
-                ("scatter_pca","Projeção PCA dos Clusters"),
-                ("perfil_medio_clusters","Perfil Médio dos Clusters"),
-                ("importancia_variaveis","Importância das Variáveis nos Clusters"),
-                ("mapa_clusters","Mapa Temático dos Clusters")
+                ("scatter_pca", "Projeção PCA dos Clusters"),
+                ("perfil_medio_clusters", "Perfil Médio dos Clusters"),
+                ("importancia_variaveis", "Importância das Variáveis nos Clusters"),
+                ("mapa_clusters", "Mapa Temático dos Clusters")
             ]
 
-            for chave,titulo in sections:
+            for chave, titulo in sections:
                 story.append(Paragraph(f"<b>{titulo}</b>", styles["Heading2"]))
-                story.append(Spacer(1,6))
-                story.append(Paragraph(descricoes.get(chave,"Análise não disponível."), styles["Normal"]))
-                story.append(Spacer(1,8))
+                story.append(Spacer(1, 6))
+                story.append(Paragraph(descricoes.get(chave, "Análise não disponível."), styles["Normal"]))
+                story.append(Spacer(1, 8))
                 if saved_imgs.get(chave):
                     story.append(Image(saved_imgs[chave], width=480, height=240))
-                story.append(Spacer(1,16))
+                story.append(Spacer(1, 16))
 
-            story.append(Spacer(1,20))
-            story.append(Paragraph("<i>Relatório gerado automaticamente com IA (LLaMA 3) - Monitor RJ.</i>", styles["Normal"]))
+            story.append(Spacer(1, 20))
+            story.append(Paragraph("<i>Relatório gerado automaticamente com IA (GPT-4o Mini) - Monitor RJ.</i>", styles["Normal"]))
 
             doc.build(story)
             buffer.seek(0)
@@ -1873,7 +1779,7 @@ def export_agrupamentos_pdf():
             return send_file(buffer, as_attachment=True, download_name=nome_pdf, mimetype="application/pdf")
     except Exception as e:
         print(f"[ERRO PDF AGRUPAMENTOS] {e}")
-        return jsonify({"erro":"Falha ao gerar PDF"}), 500
+        return jsonify({"erro": "Falha ao gerar PDF"}), 500
 
 @app.route("/cadastro", methods=["GET", "POST"])
 def cadastro():
@@ -1884,7 +1790,6 @@ def cadastro():
         password = request.form["password"]
         confirm_password = request.form["confirm_password"]
  
-        # Validação simples de senha
         if password != confirm_password:
             flash("As senhas não coincidem!")
             return redirect(url_for("cadastro"))
@@ -1893,7 +1798,6 @@ def cadastro():
             conn = get_connection()
             cur = conn.cursor()
            
-            # Inserção na tabela users
             cur.execute("""
                 INSERT INTO users (nome, email, username, password)
                 VALUES (%s, %s, %s, %s)
@@ -1907,7 +1811,6 @@ def cadastro():
             return redirect(url_for("login"))
  
         except psycopg2.IntegrityError:
-            # Caso tente inserir email ou username duplicado
             conn.rollback()
             flash("Email ou usuário já cadastrado!")
             return redirect(url_for("cadastro"))
@@ -1926,20 +1829,16 @@ def login():
         password = request.form.get('password')
         user_captcha = request.form.get('captcha', '').upper()
 
-        # SE ESTIVER EM TEST_MODE, PULA O CAPTCHA
         if os.getenv("TEST_MODE") == "1":
             print("⚠ TEST_MODE ATIVO → Ignorando captcha do login!")
         else:
-            # Validação real do captcha
             if user_captcha != session.get('captcha_text', ''):
                 flash("Captcha incorreto!")
                 return redirect(url_for('login'))
         
-        # Conectar ao banco de dados
         conn = get_connection()
         cur = conn.cursor()
 
-        # Validação do usuário no banco
         cur.execute("SELECT * FROM users WHERE username=%s AND password=%s",
                     (username, password))
         user = cur.fetchone()
@@ -1957,7 +1856,6 @@ def login():
 def gerar_descricoes_previsao(payload):
     """
     Gera descrições automáticas para a página de previsão.
-    Agora o prompt de soma e média foi unificado.
     """
     descricoes = {
         "historico": "Análise não disponível.",
@@ -1967,9 +1865,6 @@ def gerar_descricoes_previsao(payload):
     }
 
     try:
-        # =====================
-        # HISTÓRICO E PREVISÃO
-        # =====================
         previsao = payload.get("previsao_leitura", 0)
         intervalo = payload.get("intervalo_95", [0, 0])
         tendencia = payload.get("tendencia", "Indefinida")
@@ -1993,9 +1888,6 @@ Mande em texto corrido, não em markdown.
 """
         descricoes["historico"] = gerar_texto_gpt4o(prompt_historico)
 
-        # =====================
-        # IMPORTÂNCIA DAS FEATURES
-        # =====================
         feature_importance = payload.get("feature_importance", {})
         top_features = sorted(feature_importance.items(), key=lambda x: x[1], reverse=True)[:5]
         resumo_features = ", ".join([f"{k.replace('_', ' ')} ({v:.3f})" for k, v in top_features])
@@ -2009,9 +1901,6 @@ Analise as principais variáveis que influenciam a previsão e produza uma respo
 """
         descricoes["feature_importance"] = gerar_texto_gpt4o(prompt_features)
 
-        # =====================
-        # INTERVALO DE CONFIANÇA
-        # =====================
         lower, upper = intervalo
         amplitude = upper - lower
         resumo_intervalo = f"Intervalo: [{lower:.1f}, {upper:.1f}], amplitude: {amplitude:.1f}"
@@ -2025,13 +1914,10 @@ Analise o intervalo de confiança da previsão e produza uma resposta curta (2-3
 """
         descricoes["intervalo_confianca"] = gerar_texto_gpt4o(prompt_intervalo)
 
-        # =====================
-        # COMPARAÇÃO UNIFICADA (SOMA + MÉDIA)
-        # =====================
         soma_hist = sum(payload.get("historico_valores", []))
         soma_prev = sum(payload.get("prev_valores", []))
         media_hist = np.mean(payload.get("historico_valores", [])) if payload.get("historico_valores") else 0
-        media_prev = np.mean(payload.get("prev_valores", [])) if payload.get("prev_valores") else 0
+        media_prev_val = np.mean(payload.get("prev_valores", [])) if payload.get("prev_valores") else 0
 
         prompt_soma_media = f"""
 Você é um analista de segurança pública.
@@ -2042,7 +1928,7 @@ e interprete o que isso pode significar para o cenário de segurança.
 Mande em texto corrido, não em markdown.
 [SOMA E MÉDIA]
 Soma - Histórico: {soma_hist:.1f} | Previsões: {soma_prev:.1f}
-Média - Histórico: {media_hist:.1f} | Previsões: {media_prev:.1f}
+Média - Histórico: {media_hist:.1f} | Previsões: {media_prev_val:.1f}
 """
         descricoes["soma_media_comparacao"] = gerar_texto_gpt4o(prompt_soma_media)
 
@@ -2054,9 +1940,7 @@ Média - Histórico: {media_hist:.1f} | Previsões: {media_prev:.1f}
 
 def criar_graficos_temp_previsao(payload, tmp_dir):
     """
-    Cria dois gráficos:
-      1. Histórico vs Previsões (Soma e Média ao longo do tempo)
-      2. Contribuição por Fator (importância das variáveis)
+    Cria gráficos para o relatório de previsão.
     """
     saved = {}
 
@@ -2072,7 +1956,6 @@ def criar_graficos_temp_previsao(payload, tmp_dir):
         for x in media_prev
     ]
 
-    # ---------- Conversão None → NaN ----------
     def to_nan_list(lista):
         return [np.nan if (v is None or v == "None") else v for v in lista]
 
@@ -2080,39 +1963,21 @@ def criar_graficos_temp_previsao(payload, tmp_dir):
     media_hist = to_nan_list(media_hist)
     media_prev = to_nan_list(media_prev)
 
-    # ---------- Garantir alinhamentos ----------
-    # Se media_hist for menor que histórico, completa com NaN no início
     if len(media_hist) < len(historico):
         diff = len(historico) - len(media_hist)
         media_hist = [np.nan] * diff + media_hist
 
-    # Função auxiliar para converter "YYYY-MM" em datetime
     def to_date(label_list):
         return [datetime.strptime(x, "%Y-%m") for x in label_list]
 
-    # ===============================
-    # 1️⃣ Gráfico: Histórico vs Previsões — Soma e Média
-    # ===============================
     if historico:
         plt.figure(figsize=(10, 6))
 
         hist_dates = to_date(labels_hist)
         prev_dates = to_date(prev_labels)
 
-        # ------------------------------
-        # Linha: Soma Histórica (azul)
-        # ------------------------------
-        plt.plot(
-            hist_dates,
-            historico,
-            label="Soma Histórica",
-            linewidth=2,
-            color="#1f77b4"
-        )
+        plt.plot(hist_dates, historico, label="Soma Histórica", linewidth=2, color="#1f77b4")
 
-        # ------------------------------
-        # Pontos: Soma Prevista (vermelho)
-        # ------------------------------
         previsoes_clean = [(d, v) for d, v in zip(prev_dates, previsoes) if not np.isnan(v)]
         if previsoes_clean:
             plt.scatter(
@@ -2122,22 +1987,9 @@ def criar_graficos_temp_previsao(payload, tmp_dir):
                 color="#d62728"
             )
 
-        # ------------------------------
-        # Linha: Média Histórica (verde)
-        # ------------------------------
         if media_hist:
-            plt.plot(
-                hist_dates,
-                media_hist,
-                label="Média Histórica",
-                linewidth=2,
-                alpha=0.7,
-                color="#2ca02c"
-            )
+            plt.plot(hist_dates, media_hist, label="Média Histórica", linewidth=2, alpha=0.7, color="#2ca02c")
 
-        # ------------------------------
-        # Pontos: Média Prevista (laranja)
-        # ------------------------------
         media_prev_clean = [(d, v) for d, v in zip(prev_dates, media_prev) if not np.isnan(v)]
         if media_prev_clean:
             plt.scatter(
@@ -2163,9 +2015,6 @@ def criar_graficos_temp_previsao(payload, tmp_dir):
 
         saved["historico_previsoes_soma_media"] = caminho
 
-    # ===============================
-    # 2️⃣ Gráfico: Contribuição por Fator
-    # ===============================
     if feature_importance:
         fatores = list(feature_importance.keys())
         importancias = list(feature_importance.values())
@@ -2194,10 +2043,8 @@ def criar_graficos_temp_previsao(payload, tmp_dir):
 def export_previsao_pdf():
     payload = request.get_json()
 
-    # --- 1️⃣ Gera análises textuais ---
     descricoes = gerar_descricoes_previsao(payload)
 
-    # --- 2️⃣ Gera gráficos temporários ---
     tmp_dir = tempfile.mkdtemp()
     try:
         print(payload)
@@ -2207,40 +2054,27 @@ def export_previsao_pdf():
         print("Erro ao criar gráficos temporários:", e)
         graficos = {}
 
-    # --- 3️⃣ Cria o PDF ---
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer)
     styles = getSampleStyleSheet()
     story = []
 
-    # === Cabeçalho ===
     story.append(Paragraph("<b>Relatório de Previsão de Letalidade Violenta</b>", styles["Title"]))
     story.append(Spacer(1, 8))
 
-    # ----------------------------
-    # Aqui: insere os valores de todas as variáveis (no início do PDF)
-    # ----------------------------
-    # Primeiro tenta obter features_dict diretamente do payload (ideal, vindo do frontend)
     features_dict = payload.get("features_dict")
-    # Se não existir, tenta reconstruir a partir de payload["features"] e feature_names (caso feature_names esteja no escopo)
     if not features_dict:
         features_list = payload.get("features") or payload.get("features_array") or []
         try:
-            # feature_names deve existir no módulo (definido no servidor)
             features_dict = dict(zip(feature_names, features_list))
         except Exception:
-            # fallback: cria chaves genéricas
             features_dict = {f"feature_{i}": v for i, v in enumerate(features_list)}
 
-    # Título da seção de variáveis
     story.append(Paragraph("<b>Valores das Variáveis (entrada)</b>", styles["Heading2"]))
     story.append(Spacer(1, 6))
 
-    # Constrói uma tabela com duas colunas: variável | valor
     table_data = [["Variável", "Valor"]]
-    # Garante ordem estável (ordenamos pela chave para previsibilidade)
     for k in sorted(features_dict.keys()):
-        # Formata números com 3 casas decimais quando forem float/numéricos
         v = features_dict[k]
         if isinstance(v, float):
             v_str = f"{v:.3f}"
@@ -2248,7 +2082,6 @@ def export_previsao_pdf():
             v_str = str(v)
         table_data.append([k.replace('_', ' '), v_str])
 
-    # Cria Table com estilo simples
     tbl = Table(table_data, colWidths=[200, 200])
     tbl.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#f2f2f2')),
@@ -2258,8 +2091,8 @@ def export_previsao_pdf():
         ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
         ('FONTSIZE', (0, 0), (-1, -1), 9),
         ('INNERGRID', (0, 0), (-1, -1), 0.25, colors.grey),
-        ('BOX', (0,0), (-1,-1), 0.25, colors.grey),
-        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+        ('BOX', (0, 0), (-1, -1), 0.25, colors.grey),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
     ]))
     story.append(tbl)
     story.append(Spacer(1, 12))
@@ -2270,12 +2103,10 @@ def export_previsao_pdf():
     story.append(Paragraph(f"Risco: {payload.get('risco', '-')}", styles["Normal"]))
     story.append(Spacer(1, 12))
     
-    # --- Drivers principais (colocar logo após os valores) ---
     drivers = payload.get("drivers", [])
     story.append(Paragraph("<b>Drivers Principais</b>", styles["Heading2"]))
     story.append(Spacer(1, 6))
     if drivers:
-        # se for lista, coloca em bullets; se string, só imprime
         if isinstance(drivers, (list, tuple)):
             for d in drivers:
                 story.append(Paragraph(f"• {d}", styles["Normal"]))
@@ -2285,12 +2116,10 @@ def export_previsao_pdf():
         story.append(Paragraph("Nenhum driver identificado.", styles["Normal"]))
     story.append(Spacer(1, 12))
 
-    # === Análise textual ===
     story.append(Paragraph("<b>Análise da Previsão</b>", styles["Heading2"]))
     story.append(Paragraph(descricoes.get("historico", "—"), styles["Normal"]))
     story.append(Spacer(1, 12))
 
-    # === Importância das Variáveis (gráfico) ===
     story.append(Paragraph("<b>Importância das Variáveis / Contribuição por Fator</b>", styles["Heading2"]))
     story.append(Spacer(1, 6))
     if "feature_importance" in graficos:
@@ -2299,29 +2128,23 @@ def export_previsao_pdf():
             story.append(Spacer(1, 10))
         except Exception as e:
             print("Erro ao adicionar imagem feature_importance:", e)
-    # também escreve o resumo textual gerado
     story.append(Paragraph(descricoes.get("feature_importance", "—"), styles["Normal"]))
     story.append(Spacer(1, 12))
 
-    # === Intervalo de confiança ===
     story.append(Paragraph("<b>Intervalo de Confiança</b>", styles["Heading2"]))
     story.append(Paragraph(descricoes.get("intervalo_confianca", "—"), styles["Normal"]))
     story.append(Spacer(1, 12))
 
-    # === Gráfico único: Histórico vs Previsões (Soma e Média) ===
     if "historico_previsoes_soma_media" in graficos:
-      story.append(Paragraph("<b>Histórico vs Previsões — Soma e Média ao longo do tempo</b>", styles["Heading2"]))
-      story.append(Image(graficos["historico_previsoes_soma_media"], width=450, height=300))
-      story.append(Spacer(1, 6))
-      story.append(Paragraph(descricoes.get("soma_media_comparacao", "—"), styles["Normal"]))
-      story.append(Spacer(1, 12))
+        story.append(Paragraph("<b>Histórico vs Previsões — Soma e Média ao longo do tempo</b>", styles["Heading2"]))
+        story.append(Image(graficos["historico_previsoes_soma_media"], width=450, height=300))
+        story.append(Spacer(1, 6))
+        story.append(Paragraph(descricoes.get("soma_media_comparacao", "—"), styles["Normal"]))
+        story.append(Spacer(1, 12))
 
-    # Finaliza documento
     doc.build(story)
-
     buffer.seek(0)
 
-    # Limpa arquivos temporários
     try:
         shutil.rmtree(tmp_dir, ignore_errors=True)
     except Exception:
@@ -2329,13 +2152,6 @@ def export_previsao_pdf():
 
     return send_file(buffer, as_attachment=True, download_name='relatorio_previsao.pdf', mimetype='application/pdf')
 
-# ===========================
-# ⚠️ COLE ESTE CÓDIGO NO SEU app.py
-# ===========================
-
-# Adicione este import no topo do app.py:
-# from mlxtend.frequent_patterns import apriori, association_rules
-# from mlxtend.preprocessing import TransactionEncoder
 
 # ===========================
 # API - Regras de Associação (Apriori)
@@ -2346,23 +2162,12 @@ def associacao_data():
     """
     Executa o algoritmo Apriori para descobrir regras de associação entre
     tipos de crime registrados por CISP/período.
-    
-    Parâmetros GET:
-        inicio       - data início (YYYY-MM-DD)
-        fim          - data fim    (YYYY-MM-DD)
-        municipio    - nome do município (opcional)
-        min_support  - suporte mínimo  (float, default 0.05)
-        min_conf     - confiança mínima (float, default 0.5)
-        min_lift     - lift mínimo      (float, default 1.2)
-        top_n        - máx de regras retornadas (int, default 30)
-        group_by     - granularidade: "cisp"|"aisp"|"risp"|"mcirc" (default "cisp")
     """
     from mlxtend.frequent_patterns import apriori, association_rules
     from mlxtend.preprocessing import TransactionEncoder
 
     df = load_data()
 
-    # ---------- Parâmetros ----------
     inicio     = request.args.get("inicio")
     fim        = request.args.get("fim")
     municipio  = request.args.get("municipio")
@@ -2372,7 +2177,6 @@ def associacao_data():
     top_n      = int(request.args.get("top_n",         30))
     group_by   = request.args.get("group_by",          "cisp")
 
-    # ---------- Filtros temporais ----------
     df["data"] = pd.to_datetime(
         df["ano"].astype(str) + "-" + df["mes"].astype(str) + "-01"
     )
@@ -2381,7 +2185,6 @@ def associacao_data():
     if fim:
         df = df[df["data"] <= pd.to_datetime(fim)]
 
-    # ---------- Filtro por município ----------
     if municipio:
         try:
             gdf_mun = gpd.read_file(SHAPEFILES["mcirc"])[["CD_MUN", "NM_MUN"]]
@@ -2395,7 +2198,6 @@ def associacao_data():
     if df.empty:
         return jsonify({"error": "Sem dados após os filtros aplicados."}), 400
 
-    # ---------- Colunas de crime a considerar ----------
     colunas_crime = [
         "hom_doloso", "latrocinio", "hom_por_interv_policial",
         "tentat_hom", "lesao_corp_dolosa", "estupro",
@@ -2407,23 +2209,19 @@ def associacao_data():
     ]
     colunas_disponiveis = [c for c in colunas_crime if c in df.columns]
 
-    # ---------- Agregar por unidade (group_by + mês/ano) ----------
     grupo_cols = [group_by, "ano", "mes"] if group_by in df.columns else ["ano", "mes"]
     df_agg = df.groupby(grupo_cols)[colunas_disponiveis].sum().reset_index()
 
-    # ---------- Binarizar: 1 se crime > mediana do crime, 0 caso contrário ----------
     df_bin = df_agg[colunas_disponiveis].copy()
     for col in colunas_disponiveis:
         mediana = df_bin[col].median()
         df_bin[col] = (df_bin[col] > mediana).astype(bool)
 
-    # ---------- Remover colunas sem variação ----------
     df_bin = df_bin.loc[:, df_bin.nunique() > 1]
 
     if df_bin.shape[1] < 2:
         return jsonify({"error": "Dados insuficientes para gerar regras de associação."}), 400
 
-    # ---------- Apriori ----------
     try:
         freq_items = apriori(df_bin, min_support=min_sup, use_colnames=True, max_len=4)
         if freq_items.empty:
@@ -2435,10 +2233,8 @@ def associacao_data():
         if rules.empty:
             return jsonify({"error": "Nenhuma regra encontrada com os parâmetros informados."}), 400
 
-        # Ordenar por lift desc, limitar
         rules = rules.sort_values("lift", ascending=False).head(top_n)
 
-        # ---------- Serializar ----------
         rules_list = []
         for _, row in rules.iterrows():
             rules_list.append({
@@ -2451,7 +2247,6 @@ def associacao_data():
                 "leverage":   round(float(row.get("leverage",  0.0)), 4),
             })
 
-        # ---------- Frequências dos itemsets (para gráfico de barras) ----------
         freq_items["itemset_label"] = freq_items["itemsets"].apply(
             lambda x: " + ".join(sorted(x))
         )
@@ -2461,7 +2256,6 @@ def associacao_data():
         )
         itemsets_freq = freq_items_sorted[["itemset_label", "support"]].to_dict(orient="records")
 
-        # ---------- Co-ocorrência para heatmap ----------
         cooc = {}
         for col_a in df_bin.columns:
             cooc[col_a] = {}
@@ -2470,7 +2264,6 @@ def associacao_data():
                     float((df_bin[col_a] & df_bin[col_b]).mean()), 4
                 )
 
-        # ---------- Estatísticas gerais ----------
         stats = {
             "total_transacoes":    int(len(df_bin)),
             "total_itemsets":      int(len(freq_items)),
@@ -2513,7 +2306,6 @@ def gerar_descricoes_associacao(payload):
     itemsets = payload.get("itemsets_freq", [])
     stats = payload.get("stats", {})
 
-    # ================== REGRAS ==================
     if rules:
         top = rules[0]
         resumo_regras = (
@@ -2531,7 +2323,6 @@ Explique brevemente (2-3 frases) o significado das regras de associação:
 """
     descricoes["regras"] = gerar_texto_gpt4o(prompt_regras)
 
-    # ================== ITEMSETS ==================
     if itemsets:
         top_items = itemsets[:5]
         resumo_items = ", ".join([f"{i['itemset_label']} ({i['support']})" for i in top_items])
@@ -2545,7 +2336,6 @@ Analise os conjuntos frequentes abaixo e gere uma explicação curta (2-3 frases
 """
     descricoes["itemsets"] = gerar_texto_gpt4o(prompt_items)
 
-    # ================== HEATMAP ==================
     cooc = payload.get("coocorrencia", {})
     if cooc:
         resumo_heat = "Existe co-ocorrência relevante entre alguns crimes."
@@ -2559,7 +2349,6 @@ Explique brevemente o padrão de co-ocorrência entre crimes:
 """
     descricoes["heatmap"] = gerar_texto_gpt4o(prompt_heat)
 
-    # ================== RESUMO ==================
     resumo = f"""
 Total de regras: {stats.get('total_regras', 0)},
 Lift médio: {stats.get('lift_medio', 0)},
@@ -2573,7 +2362,6 @@ Faça um resumo executivo (2-3 frases):
 """
     descricoes["resumo"] = gerar_texto_gpt4o(prompt_resumo)
 
-    # ================== REDE ==================
     if rules:
         top = rules[0]
         resumo_rede = f"{top['antecedentes']} levam a {top['consequentes']} com lift {top['lift']}"
@@ -2592,7 +2380,6 @@ Faça um resumo executivo (2-3 frases):
 def criar_graficos_temp_associacao(payload, tmp_dir):
     saved = {}
 
-    # ================= ITEMSETS =================
     itemsets = payload.get("itemsets_freq", [])
     if itemsets:
         labels = [i["itemset_label"] for i in itemsets[:15]]
@@ -2609,7 +2396,6 @@ def criar_graficos_temp_associacao(payload, tmp_dir):
         plt.close()
         saved["itemsets"] = caminho
 
-    # ================= SCATTER =================
     rules = payload.get("rules", [])
     if rules:
         xs = [r["support"] for r in rules]
@@ -2627,7 +2413,6 @@ def criar_graficos_temp_associacao(payload, tmp_dir):
         plt.close()
         saved["scatter"] = caminho
 
-    # ================= HEATMAP =================
     cooc = payload.get("coocorrencia", {})
     if cooc:
         df = pd.DataFrame(cooc)
@@ -2645,13 +2430,11 @@ def criar_graficos_temp_associacao(payload, tmp_dir):
         plt.close()
         saved["heatmap"] = caminho
 
-    # ================= REDE DE ASSOCIAÇÕES =================
     rules = payload.get("rules", [])
     if rules:
         G = nx.DiGraph()
 
-        # Criar nós e arestas
-        for r in rules[:30]:  # limitar para não poluir
+        for r in rules[:30]:
             for ant in r["antecedentes"]:
                 for cons in r["consequentes"]:
                     G.add_edge(
@@ -2694,7 +2477,6 @@ def criar_graficos_temp_associacao(payload, tmp_dir):
 @login_required
 def export_associacao_pdf():
     try:
-        # Reutiliza a mesma lógica da API
         response = associacao_data()
         payload = response.get_json()
 
@@ -2708,20 +2490,17 @@ def export_associacao_pdf():
             styles = getSampleStyleSheet()
             story = []
 
-            # ===== TÍTULO =====
             story.append(Paragraph("<b>Relatório de Regras de Associação</b>", styles["Title"]))
             story.append(Spacer(1, 12))
 
             stats = payload.get("stats", {})
 
-            # ===== KPIs =====
             story.append(Paragraph("<b>Resumo Geral</b>", styles["Heading2"]))
             story.append(Paragraph(f"• Total de regras: {stats.get('total_regras', 0)}", styles["Normal"]))
             story.append(Paragraph(f"• Lift médio: {stats.get('lift_medio', 0)}", styles["Normal"]))
             story.append(Paragraph(f"• Confiança média: {stats.get('confianca_media', 0)}", styles["Normal"]))
             story.append(Spacer(1, 20))
 
-            # ===== SEÇÕES COM GRÁFICOS =====
             sections = [
                 ("itemsets", "Itemsets Frequentes"),
                 ("scatter", "Relação Suporte x Confiança"),
@@ -2741,22 +2520,18 @@ def export_associacao_pdf():
 
                 story.append(Spacer(1, 16))
 
-            # ===== RESUMO EXECUTIVO =====
             story.append(Paragraph("<b>Resumo Executivo</b>", styles["Heading2"]))
             story.append(Paragraph(descricoes["resumo"], styles["Normal"]))
             story.append(Spacer(1, 20))
 
-            # ===== PRINCIPAIS REGRAS =====
             rules = payload.get("rules", [])
 
             if rules:
-                # Ordenar por lift (mais forte primeiro)
                 rules = sorted(rules, key=lambda x: x["lift"], reverse=True)
 
                 story.append(Paragraph("<b>Principais Regras de Associação</b>", styles["Heading2"]))
                 story.append(Spacer(1, 6))
 
-                # 🔥 AQUI está o que faltava
                 story.append(Paragraph(descricoes.get("regras", ""), styles["Normal"]))
                 story.append(Spacer(1, 10))
 
@@ -2789,7 +2564,6 @@ def export_associacao_pdf():
                 story.append(Paragraph("Nenhuma regra encontrada com os parâmetros selecionados.", styles["Normal"]))
                 story.append(Spacer(1, 20))
 
-            # ===== GERAR PDF =====
             doc.build(story)
             buffer.seek(0)
 
@@ -2805,8 +2579,7 @@ def export_associacao_pdf():
         return jsonify({"erro": "Falha ao gerar PDF"}), 500
         
 if __name__ == "__main__":
-    # TESTA SE ESTÁ RODANDO LOCALMENTE
-    if os.getenv("RENDER") != "true":  # Render define a variável de ambiente RENDER=true
+    if os.getenv("RENDER") != "true":
         host = os.getenv("IP_OR_HOST", "127.0.0.1")
         port = int(os.getenv("PORT", 5000))
         debug = os.getenv("FLASK_DEBUG", "1") == "1"
